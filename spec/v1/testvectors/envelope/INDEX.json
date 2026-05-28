@@ -1,0 +1,166 @@
+{
+  "canonVectors": [
+    {
+      "id": "001",
+      "name": "null",
+      "description": "null serializes to literal \"null\""
+    },
+    {
+      "id": "002",
+      "name": "true",
+      "description": "true serializes to literal \"true\""
+    },
+    {
+      "id": "003",
+      "name": "false",
+      "description": "false serializes to literal \"false\""
+    },
+    {
+      "id": "004",
+      "name": "zero",
+      "description": "integer 0"
+    },
+    {
+      "id": "005",
+      "name": "negative-zero",
+      "description": "-0 serializes as \"0\" per RFC 8785"
+    },
+    {
+      "id": "006",
+      "name": "positive-integer",
+      "description": "positive integer 42"
+    },
+    {
+      "id": "007",
+      "name": "negative-integer",
+      "description": "negative integer -42"
+    },
+    {
+      "id": "008",
+      "name": "empty-string",
+      "description": "empty string"
+    },
+    {
+      "id": "009",
+      "name": "ascii-string",
+      "description": "simple ASCII string"
+    },
+    {
+      "id": "010",
+      "name": "string-with-quote",
+      "description": "string containing a double quote"
+    },
+    {
+      "id": "011",
+      "name": "string-with-backslash",
+      "description": "string containing backslash"
+    },
+    {
+      "id": "012",
+      "name": "string-with-newline-tab",
+      "description": "string with control char escapes"
+    },
+    {
+      "id": "013",
+      "name": "string-with-other-control",
+      "description": "string with a non-mnemonic control char (U+0001)"
+    },
+    {
+      "id": "014",
+      "name": "string-non-ascii-passthrough",
+      "description": "non-ASCII passes through as UTF-8 bytes (no \\u escapes)"
+    },
+    {
+      "id": "015",
+      "name": "empty-array",
+      "description": "empty array"
+    },
+    {
+      "id": "016",
+      "name": "array-of-numbers",
+      "description": "array preserves order"
+    },
+    {
+      "id": "017",
+      "name": "empty-object",
+      "description": "empty object"
+    },
+    {
+      "id": "018",
+      "name": "object-key-sort",
+      "description": "object keys sorted lexicographically by UTF-16 code unit"
+    },
+    {
+      "id": "019",
+      "name": "nested-object",
+      "description": "nested object recursion"
+    },
+    {
+      "id": "020",
+      "name": "mixed-types",
+      "description": "object containing all primitive types"
+    },
+    {
+      "id": "021",
+      "name": "key-with-special-chars",
+      "description": "object key containing characters that need escaping"
+    },
+    {
+      "id": "022",
+      "name": "numeric-keys-sort",
+      "description": "numeric-string keys sort lexicographically (not numerically) — \"10\" < \"9\""
+    }
+  ],
+  "envelopeVectors": [
+    {
+      "id": "101",
+      "name": "minimal-claim",
+      "description": "A claim with only required fields, no optional features."
+    },
+    {
+      "id": "102",
+      "name": "claim-with-scene-tree",
+      "description": "A claim with scene tree root populated. Per-leaf hashes are NOT in the committed claim post-refactor — they live in the opt-in comparison disclosure bundle (Section 06)."
+    },
+    {
+      "id": "103",
+      "name": "claim-with-preferences",
+      "description": "A claim with user preferences populated."
+    },
+    {
+      "id": "104",
+      "name": "claim-with-extensions",
+      "description": "A claim with non-empty claimExtensions — forward-compatibility."
+    },
+    {
+      "id": "105",
+      "name": "claim-full",
+      "description": "A claim with every optional field populated: scene tree, paragraph tree, preferences, extensions, AND a signed registrant block from the frozen test-corpus Ed25519 key (deterministic signature per RFC 8032)."
+    },
+    {
+      "id": "109",
+      "name": "claim-with-paragraph-tree-only",
+      "description": "A claim with ONLY the paragraph tree populated (no scene tree). Demonstrates the paragraph layer is independently committable for short-form work where scene segmentation is not meaningful."
+    },
+    {
+      "id": "110",
+      "name": "claim-with-revision-pointer",
+      "description": "A claim pointing to a previous registration (revision lineage / amendment chain)."
+    },
+    {
+      "id": "106",
+      "name": "minimal-envelope",
+      "description": "A full envelope wrapping the minimal claim, no proofs."
+    },
+    {
+      "id": "107",
+      "name": "envelope-with-ots-proof",
+      "description": "A full envelope with one OpenTimestamps proof entry."
+    },
+    {
+      "id": "108",
+      "name": "envelope-with-multiple-proofs",
+      "description": "A full envelope with multiple proofs (forward-compat test: same claim, multiple anchors)."
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+[
+  {
+    "sceneIndex": 0,
+    "byteStart": 0,
+    "byteEnd": 36
+  },
+  {
+    "sceneIndex": 1,
+    "byteStart": 36,
+    "byteEnd": 72
+  },
+  {
+    "sceneIndex": 2,
+    "byteStart": 72,
+    "byteEnd": 108
+  },
+  {
+    "sceneIndex": 3,
+    "byteStart": 108,
+    "byteEnd": 144
+  },
+  {
+    "sceneIndex": 4,
+    "byteStart": 144,
+    "byteEnd": 180
+  },
+  {
+    "sceneIndex": 5,
+    "byteStart": 180,
+    "byteEnd": 216
+  },
+  {
+    "sceneIndex": 6,
+    "byteStart": 216,
+    "byteEnd": 252
+  },
+  {
+    "sceneIndex": 7,
+    "byteStart": 252,
+    "byteEnd": 288
+  },
+  {
+    "sceneIndex": 8,
+    "byteStart": 288,
+    "byteEnd": 324
+  },
+  {
+    "sceneIndex": 9,
+    "byteStart": 324,
+    "byteEnd": 360
+  },
+  {
+    "sceneIndex": 10,
+    "byteStart": 360,
+    "byteEnd": 398
+  },
+  {
+    "sceneIndex": 11,
+    "byteStart": 398,
+    "byteEnd": 436
+  },
+  {
+    "sceneIndex": 12,
+    "byteStart": 436,
+    "byteEnd": 474
+  }
+]

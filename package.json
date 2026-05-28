@@ -1,0 +1,78 @@
+{
+  "name": "@screenplay-registry/cli",
+  "version": "0.1.0",
+  "description": "Reference implementation of The Screenplay Registry — a free, open, cryptographically verifiable timestamp for screenplays anchored to Bitcoin via OpenTimestamps.",
+  "private": true,
+  "license": "MIT",
+  "author": "Rufus Xavier <protocol@screenplayregistry.org>",
+  "homepage": "https://screenplayregistry.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/screenplay-registry/screenreg.git"
+  },
+  "bugs": {
+    "url": "https://github.com/screenplay-registry/screenreg/issues",
+    "email": "protocol@screenplayregistry.org"
+  },
+  "keywords": [
+    "screenplay",
+    "screenwriting",
+    "timestamp",
+    "bitcoin",
+    "opentimestamps",
+    "merkle",
+    "registration",
+    "cryptography",
+    "provenance",
+    "c2pa",
+    "authorship",
+    "copyright"
+  ],
+  "type": "module",
+  "bin": {
+    "screenreg": "./bin/screenreg.mjs"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "spec",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE",
+    "SPEC-LICENSE",
+    "TESTVECTORS-LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:all": "tsc -p tsconfig.all.json",
+    "check": "npm run typecheck:all && npm run test",
+    "cli": "tsx src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "fast-check": "^3.23.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "drand-client": "^1.4.2",
+    "tlock-js": "^0.9.0"
+  }
+}

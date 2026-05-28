@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:screenplay-registration-claim-schema:v1",
+  "title": "The Screenplay Registry v1 Envelope",
+  "description": "JSON Schema for The Screenplay Registry v1 envelope file. See /spec/v1/02-envelope.md for the authoritative specification.",
+  "type": "object",
+  "required": ["envelopeVersion", "committedClaim", "evidenceBundle"],
+  "additionalProperties": false,
+  "properties": {
+    "envelopeVersion": {
+      "const": "urn:screenplay-registration-envelope:v1"
+    },
+    "committedClaim": { "$ref": "#/$defs/CommittedClaim" },
+    "evidenceBundle": { "$ref": "#/$defs/EvidenceBundle" }
+  },
+  "$defs": {
+    "Sha256Hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Ed25519PublicKey": {
+      "type": "string",
+      "pattern": "^ed25519:[A-Za-z0-9+/=]+$",
+      "description": "Base64-encoded 32-byte raw Ed25519 public key per RFC 8032."
+    },
+    "Ed25519Signature": {
+      "type": "string",
+      "pattern": "^ed25519:[A-Za-z0-9+/=]+$",
+      "description": "Base64-encoded 64-byte Ed25519 signature per RFC 8032."
+    },
+    "CommittedClaim": {
+      "type": "object",
+      "required": [
+        "claimVersion",
+        "schemaId",
+        "hashAlgorithm",
+        "manifestCanonicalization",
+        "normalizationProfile",
+        "contentHash",
+        "claimExtensions"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "claimVersion": { "const": "urn:screenplay-registration-claim:v1" },
+        "schemaId": { "const": "urn:screenplay-registration-claim-schema:v1" },
+        "hashAlgorithm": { "const": "sha-256" },
+        "manifestCanonicalization": { "const": "rfc8785" },
+        "normalizationProfile": { "const": "screenplay-registration-norm/v1-strict" },
+        "contentHash": { "$ref": "#/$defs/Sha256Hash" },
+        "claimExtensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "sceneTreeProfile": { "const": "screenplay-registration-merkle/v1" },
+        "sceneTreeRoot": { "$ref": "#/$defs/Sha256Hash" },
+        "sceneCount": { "type": "integer", "minimum": 0 },
+        "paragraphTreeProfile": { "const": "screenplay-registration-paragraph-merkle/v1" },
+        "paragraphTreeRoot": { "$ref": "#/$defs/Sha256Hash" },
+        "paragraphCount": { "type": "integer", "minimum": 0 },
+        "previousRegistration": { "$ref": "#/$defs/PreviousRegistration" },
+        "registrant": { "$ref": "#/$defs/RegistrantBlock" },
+        "timelockFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/TimelockField" }
+        },
+        "encryptedFields": { "$ref": "#/$defs/EncryptedFieldsBlock" },
+        "preferences": { "$ref": "#/$defs/Preferences" }
+      },
+      "dependentRequired": {
+        "sceneTreeProfile": ["sceneTreeRoot", "sceneCount"],
+        "sceneTreeRoot": ["sceneTreeProfile", "sceneCount"],
+        "sceneCount": ["sceneTreeProfile", "sceneTreeRoot"],
+        "paragraphTreeProfile": ["paragraphTreeRoot", "paragraphCount"],
+        "paragraphTreeRoot": ["paragraphTreeProfile", "paragraphCount"],
+        "paragraphCount": ["paragraphTreeProfile", "paragraphTreeRoot"]
+      }
+    },
+    "PreviousRegistration": {
+      "type": "object",
+      "required": ["claimHash"],
+      "additionalProperties": false,
+      "properties": {
+        "claimHash": { "$ref": "#/$defs/Sha256Hash" }
+      },
+      "description": "Pointer to a parent registration this revision descends from. v1 verifiers do NOT fetch the parent; the pointer is commitment-bearing but unverified."
+    },
+    "RegistrantBlock": {
+      "type": "object",
+      "required": [
+        "publicKey",
+        "signatureAlgorithm",
+        "signatureDomain",
+        "signedDigest",
+        "signature"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "publicKey": { "$ref": "#/$defs/Ed25519PublicKey" },
+        "signatureAlgorithm": { "const": "ed25519" },
+        "signatureDomain": { "const": "screenplay-registry-claim-v1" },
+        "signedDigest": {
+          "$ref": "#/$defs/Sha256Hash",
+          "description": "SHA-256 of canonicalize(claim) with the `registrant` field omitted."
+        },
+        "signature": { "$ref": "#/$defs/Ed25519Signature" }
+      },
+      "description": "Registration-time Ed25519 signature binding a keypair to this claim. See identity addendum + Section 06 of /spec/v1/."
+    },
+    "TimelockField": {
+      "type": "object",
+      "required": [
+        "name",
+        "ciphertext",
+        "unlockAtRound",
+        "unlockAt",
+        "drandChainHash",
+        "drandPublicKey",
+        "scheme"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "ciphertext": { "type": "string", "description": "base64 of the tlock-encrypted ciphertext" },
+        "unlockAtRound": { "type": "integer", "minimum": 1 },
+        "unlockAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Informational; derived from round + Drand chain genesis + period."
+        },
+        "drandChainHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "drandPublicKey": {
+          "type": "string",
+          "pattern": "^[0-9a-f]+$"
+        },
+        "scheme": { "type": "string", "minLength": 1 }
+      },
+      "description": "Time-locked encrypted field per Section 07. v1 conformance: implementations without timelock support MAY verify other commitment fields but MUST NOT claim full v1 conformance for manifests containing this field."
+    },
+    "EncryptedFieldsBlock": {
+      "type": "object",
+      "required": ["masterSalt", "kdf", "kdfIterations", "aadFormat", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "masterSalt": {
+          "type": "string",
+          "description": "base64 of 32 random bytes"
+        },
+        "kdf": { "const": "pbkdf2-hmac-sha256" },
+        "kdfIterations": {
+          "type": "integer",
+          "minimum": 600000,
+          "description": "OWASP 2024 minimum for PBKDF2-HMAC-SHA256. v1 implementations MUST reject lower iteration counts at decrypt time."
+        },
+        "aadFormat": { "const": "screenplay-registration-aad-v1" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/EncryptedField" }
+        }
+      }
+    },
+    "EncryptedField": {
+      "type": "object",
+      "required": ["name", "iv", "ciphertext", "tag", "paddingBucket"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "iv": { "type": "string", "description": "base64 of 12 random bytes (96-bit IV)" },
+        "ciphertext": { "type": "string" },
+        "tag": { "type": "string", "description": "base64 of 16-byte GCM tag" },
+        "paddingBucket": {
+          "type": "integer",
+          "minimum": 16,
+          "description": "Power of 2, minimum 16. Default buckets per spec §04 §7 are {16, 64, 256, 1024}; explicit overrides MAY be any power of 2 ≥ 16."
+        }
+      }
+    },
+    "Preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trainingMining": {
+          "enum": ["allowed", "notAllowed", "constrained"],
+          "description": "CAWG training-data-mining preference (originated in C2PA 1.x; now maintained by the Creator Assertions Working Group at https://cawg.io/training-and-data-mining/1.0). v1 closed enum; unknown values MUST be rejected (forward-compat lands via new schemaId, not silent enum growth)."
+        }
+      }
+    },
+    "EvidenceBundle": {
+      "type": "object",
+      "required": ["committedClaimHash", "proofs", "bundleExtensions"],
+      "additionalProperties": false,
+      "properties": {
+        "committedClaimHash": { "$ref": "#/$defs/Sha256Hash" },
+        "proofs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceProof" }
+        },
+        "bundleExtensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "EvidenceProof": {
+      "type": "object",
+      "required": ["type", "claimHash"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "claimHash": { "$ref": "#/$defs/Sha256Hash" }
+      }
+    }
+  }
+}

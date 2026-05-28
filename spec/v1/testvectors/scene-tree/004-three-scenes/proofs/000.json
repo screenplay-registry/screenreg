@@ -1,0 +1,14 @@
+{
+  "sceneTreeProfile": "screenplay-registration-merkle/v1",
+  "sceneCount": 3,
+  "sceneIndex": 0,
+  "byteRange": {
+    "start": 0,
+    "end": 33
+  },
+  "sceneBytes": "SU5ULiBST09NIDAgLSBEQVkKClNjZW5lIDAgYm9keS4K",
+  "siblingHashes": [
+    "sha256:909888911607fd33e12ad28a9af1df1b244e706efd8c71b87cd3eb481205de75",
+    "sha256:5ec3ce6c2bc44f58dd9e4d567cb43235c06737d04ca3035173fe8f2dba59fae1"
+  ]
+}

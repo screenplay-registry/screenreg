@@ -1,0 +1,5 @@
+{
+  "reason": "invalid-utf8",
+  "detail": "Invalid UTF-8 byte sequence detected at offset 0",
+  "expectedDetailSubstring": "offset 0"
+}
