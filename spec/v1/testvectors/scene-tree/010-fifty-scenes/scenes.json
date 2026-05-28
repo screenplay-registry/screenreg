@@ -1,0 +1,252 @@
+[
+  {
+    "sceneIndex": 0,
+    "byteStart": 0,
+    "byteEnd": 34
+  },
+  {
+    "sceneIndex": 1,
+    "byteStart": 34,
+    "byteEnd": 68
+  },
+  {
+    "sceneIndex": 2,
+    "byteStart": 68,
+    "byteEnd": 102
+  },
+  {
+    "sceneIndex": 3,
+    "byteStart": 102,
+    "byteEnd": 136
+  },
+  {
+    "sceneIndex": 4,
+    "byteStart": 136,
+    "byteEnd": 170
+  },
+  {
+    "sceneIndex": 5,
+    "byteStart": 170,
+    "byteEnd": 204
+  },
+  {
+    "sceneIndex": 6,
+    "byteStart": 204,
+    "byteEnd": 238
+  },
+  {
+    "sceneIndex": 7,
+    "byteStart": 238,
+    "byteEnd": 272
+  },
+  {
+    "sceneIndex": 8,
+    "byteStart": 272,
+    "byteEnd": 306
+  },
+  {
+    "sceneIndex": 9,
+    "byteStart": 306,
+    "byteEnd": 340
+  },
+  {
+    "sceneIndex": 10,
+    "byteStart": 340,
+    "byteEnd": 376
+  },
+  {
+    "sceneIndex": 11,
+    "byteStart": 376,
+    "byteEnd": 412
+  },
+  {
+    "sceneIndex": 12,
+    "byteStart": 412,
+    "byteEnd": 448
+  },
+  {
+    "sceneIndex": 13,
+    "byteStart": 448,
+    "byteEnd": 484
+  },
+  {
+    "sceneIndex": 14,
+    "byteStart": 484,
+    "byteEnd": 520
+  },
+  {
+    "sceneIndex": 15,
+    "byteStart": 520,
+    "byteEnd": 556
+  },
+  {
+    "sceneIndex": 16,
+    "byteStart": 556,
+    "byteEnd": 592
+  },
+  {
+    "sceneIndex": 17,
+    "byteStart": 592,
+    "byteEnd": 628
+  },
+  {
+    "sceneIndex": 18,
+    "byteStart": 628,
+    "byteEnd": 664
+  },
+  {
+    "sceneIndex": 19,
+    "byteStart": 664,
+    "byteEnd": 700
+  },
+  {
+    "sceneIndex": 20,
+    "byteStart": 700,
+    "byteEnd": 736
+  },
+  {
+    "sceneIndex": 21,
+    "byteStart": 736,
+    "byteEnd": 772
+  },
+  {
+    "sceneIndex": 22,
+    "byteStart": 772,
+    "byteEnd": 808
+  },
+  {
+    "sceneIndex": 23,
+    "byteStart": 808,
+    "byteEnd": 844
+  },
+  {
+    "sceneIndex": 24,
+    "byteStart": 844,
+    "byteEnd": 880
+  },
+  {
+    "sceneIndex": 25,
+    "byteStart": 880,
+    "byteEnd": 916
+  },
+  {
+    "sceneIndex": 26,
+    "byteStart": 916,
+    "byteEnd": 952
+  },
+  {
+    "sceneIndex": 27,
+    "byteStart": 952,
+    "byteEnd": 988
+  },
+  {
+    "sceneIndex": 28,
+    "byteStart": 988,
+    "byteEnd": 1024
+  },
+  {
+    "sceneIndex": 29,
+    "byteStart": 1024,
+    "byteEnd": 1060
+  },
+  {
+    "sceneIndex": 30,
+    "byteStart": 1060,
+    "byteEnd": 1096
+  },
+  {
+    "sceneIndex": 31,
+    "byteStart": 1096,
+    "byteEnd": 1132
+  },
+  {
+    "sceneIndex": 32,
+    "byteStart": 1132,
+    "byteEnd": 1168
+  },
+  {
+    "sceneIndex": 33,
+    "byteStart": 1168,
+    "byteEnd": 1204
+  },
+  {
+    "sceneIndex": 34,
+    "byteStart": 1204,
+    "byteEnd": 1240
+  },
+  {
+    "sceneIndex": 35,
+    "byteStart": 1240,
+    "byteEnd": 1276
+  },
+  {
+    "sceneIndex": 36,
+    "byteStart": 1276,
+    "byteEnd": 1312
+  },
+  {
+    "sceneIndex": 37,
+    "byteStart": 1312,
+    "byteEnd": 1348
+  },
+  {
+    "sceneIndex": 38,
+    "byteStart": 1348,
+    "byteEnd": 1384
+  },
+  {
+    "sceneIndex": 39,
+    "byteStart": 1384,
+    "byteEnd": 1420
+  },
+  {
+    "sceneIndex": 40,
+    "byteStart": 1420,
+    "byteEnd": 1456
+  },
+  {
+    "sceneIndex": 41,
+    "byteStart": 1456,
+    "byteEnd": 1492
+  },
+  {
+    "sceneIndex": 42,
+    "byteStart": 1492,
+    "byteEnd": 1528
+  },
+  {
+    "sceneIndex": 43,
+    "byteStart": 1528,
+    "byteEnd": 1564
+  },
+  {
+    "sceneIndex": 44,
+    "byteStart": 1564,
+    "byteEnd": 1600
+  },
+  {
+    "sceneIndex": 45,
+    "byteStart": 1600,
+    "byteEnd": 1636
+  },
+  {
+    "sceneIndex": 46,
+    "byteStart": 1636,
+    "byteEnd": 1672
+  },
+  {
+    "sceneIndex": 47,
+    "byteStart": 1672,
+    "byteEnd": 1708
+  },
+  {
+    "sceneIndex": 48,
+    "byteStart": 1708,
+    "byteEnd": 1744
+  },
+  {
+    "sceneIndex": 49,
+    "byteStart": 1744,
+    "byteEnd": 1780
+  }
+]

@@ -1,0 +1,9 @@
+Test vectors in /spec/v1/testvectors/ are dedicated to the public domain under
+CC0 1.0 Universal:
+
+  https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+You can copy, modify, distribute, and use the test vectors, even for commercial
+purposes, all without asking permission. The test vectors are the canonical
+truth source for compliance with the protocol — anyone can use them to
+validate their implementation.

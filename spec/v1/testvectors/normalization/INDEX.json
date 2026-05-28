@@ -1,0 +1,246 @@
+{
+  "profileId": "screenplay-registration-norm/v1-strict",
+  "vectorCount": 40,
+  "vectors": [
+    {
+      "id": "001",
+      "name": "empty",
+      "description": "Empty input → empty output → SHA-256 of empty string.",
+      "kind": "normalize"
+    },
+    {
+      "id": "002",
+      "name": "single-lf",
+      "description": "Input is a single LF byte (0x0A). Output unchanged.",
+      "kind": "normalize"
+    },
+    {
+      "id": "003",
+      "name": "single-cr",
+      "description": "Input is a single CR byte (0x0D). Output should be LF (0x0A).",
+      "kind": "normalize"
+    },
+    {
+      "id": "004",
+      "name": "ascii-no-newline",
+      "description": "Pure ASCII with no trailing newline. Output identical to input.",
+      "kind": "normalize"
+    },
+    {
+      "id": "005",
+      "name": "ascii-with-lf",
+      "description": "ASCII line ending in LF. Output identical to input.",
+      "kind": "normalize"
+    },
+    {
+      "id": "010",
+      "name": "bom-only",
+      "description": "Input is exactly the UTF-8 BOM. Output is empty after stripping.",
+      "kind": "normalize"
+    },
+    {
+      "id": "011",
+      "name": "bom-then-ascii",
+      "description": "BOM + ASCII. BOM stripped; ASCII preserved.",
+      "kind": "normalize"
+    },
+    {
+      "id": "012",
+      "name": "embedded-bom-preserved",
+      "description": "BOM in the middle of the file is the zero-width no-break space U+FEFF and MUST be preserved (only the LEADING BOM is stripped).",
+      "kind": "normalize"
+    },
+    {
+      "id": "020",
+      "name": "crlf-to-lf",
+      "description": "CRLF becomes LF.",
+      "kind": "normalize"
+    },
+    {
+      "id": "021",
+      "name": "lone-cr-to-lf",
+      "description": "Lone CR (not followed by LF) becomes LF.",
+      "kind": "normalize"
+    },
+    {
+      "id": "022",
+      "name": "mixed-line-endings",
+      "description": "Mix of CRLF, LF, lone CR. All CR sequences become LF.",
+      "kind": "normalize"
+    },
+    {
+      "id": "023",
+      "name": "only-cr-bytes",
+      "description": "Input is exactly three CR bytes. Output should be three LF bytes.",
+      "kind": "normalize"
+    },
+    {
+      "id": "030",
+      "name": "already-nfc",
+      "description": "Text already in NFC. Output identical to input.",
+      "kind": "normalize"
+    },
+    {
+      "id": "031",
+      "name": "nfd-to-nfc-acute",
+      "description": "NFD form U+0065 U+0301 (e + combining acute) → NFC U+00E9 (é).",
+      "kind": "normalize"
+    },
+    {
+      "id": "032",
+      "name": "nfd-multiple-diacritics",
+      "description": "Multiple NFD sequences compose to their NFC equivalents.",
+      "kind": "normalize"
+    },
+    {
+      "id": "033",
+      "name": "nfc-non-composable",
+      "description": "NFD sequence that has no precomposed form. NFC leaves it as-is (no information loss).",
+      "kind": "normalize"
+    },
+    {
+      "id": "040",
+      "name": "zwsp-preserved",
+      "description": "Zero-width space (U+200B) is preserved — removing it would mask tampering.",
+      "kind": "normalize"
+    },
+    {
+      "id": "041",
+      "name": "zwj-zwnj-preserved",
+      "description": "Zero-width joiner (U+200D) and non-joiner (U+200C) preserved.",
+      "kind": "normalize"
+    },
+    {
+      "id": "042",
+      "name": "nbsp-preserved",
+      "description": "Non-breaking space (U+00A0) preserved.",
+      "kind": "normalize"
+    },
+    {
+      "id": "043",
+      "name": "rtl-ltr-overrides-preserved",
+      "description": "Bidi override characters preserved (security-sensitive but stripping is worse).",
+      "kind": "normalize"
+    },
+    {
+      "id": "044",
+      "name": "homoglyphs-preserved",
+      "description": "Visually identical Latin and Cyrillic letters preserved as distinct codepoints.",
+      "kind": "normalize"
+    },
+    {
+      "id": "050",
+      "name": "trailing-spaces-preserved",
+      "description": "Trailing spaces on lines preserved (Fountain semantics).",
+      "kind": "normalize"
+    },
+    {
+      "id": "051",
+      "name": "tabs-preserved",
+      "description": "Tab characters preserved (no conversion to spaces).",
+      "kind": "normalize"
+    },
+    {
+      "id": "052",
+      "name": "blank-lines-preserved",
+      "description": "Empty lines and their counts preserved (Fountain delimiter semantics).",
+      "kind": "normalize"
+    },
+    {
+      "id": "053",
+      "name": "final-newline-present",
+      "description": "A file ending in LF produces a hash that includes that LF.",
+      "kind": "normalize"
+    },
+    {
+      "id": "054",
+      "name": "final-newline-absent",
+      "description": "A file NOT ending in LF produces a DIFFERENT hash than one that does.",
+      "kind": "normalize"
+    },
+    {
+      "id": "060",
+      "name": "fountain-scene-heading",
+      "description": "Fountain INT./EXT. scene heading; ASCII only, no transforms needed.",
+      "kind": "normalize"
+    },
+    {
+      "id": "061",
+      "name": "fountain-dialogue",
+      "description": "Fountain character + dialogue with smart quotes (already NFC).",
+      "kind": "normalize"
+    },
+    {
+      "id": "062",
+      "name": "fountain-with-crlf",
+      "description": "Fountain content saved by a Windows tool (CRLF line endings).",
+      "kind": "normalize"
+    },
+    {
+      "id": "063",
+      "name": "fountain-with-bom-and-crlf",
+      "description": "Fountain content saved by Windows Notepad (BOM + CRLF).",
+      "kind": "normalize"
+    },
+    {
+      "id": "070",
+      "name": "combined-bom-crlf-nfd",
+      "description": "BOM + CRLF + NFD all at once — exercises all transforms.",
+      "kind": "normalize"
+    },
+    {
+      "id": "071",
+      "name": "unicode-supplementary",
+      "description": "Supplementary plane characters (emoji) preserved correctly.",
+      "kind": "normalize"
+    },
+    {
+      "id": "080",
+      "name": "large-1mb",
+      "description": "~1 MB of repeated ASCII content. Performance + correctness sanity check.",
+      "kind": "normalize"
+    },
+    {
+      "id": "090",
+      "name": "invalid-overlong-null",
+      "description": "Overlong encoding of U+0000 as 0xC0 0x80 — rejected per RFC 3629 strict.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "091",
+      "name": "invalid-lone-continuation",
+      "description": "Lone continuation byte 0x80 with no leading byte.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "092",
+      "name": "invalid-truncated-multibyte",
+      "description": "3-byte sequence indicator 0xE0 with only 1 continuation byte.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "093",
+      "name": "invalid-surrogate",
+      "description": "Encoded high surrogate U+D800 (0xED 0xA0 0x80) — rejected.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "094",
+      "name": "invalid-codepoint-too-large",
+      "description": "Encoded codepoint U+110000 (0xF4 0x90 0x80 0x80) > U+10FFFF — rejected.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "095",
+      "name": "invalid-5byte-attempt",
+      "description": "5-byte sequence indicator (0xF8) is not valid in UTF-8.",
+      "kind": "reject-invalid-utf8"
+    },
+    {
+      "id": "096",
+      "name": "invalid-stray-c1",
+      "description": "Stray leading byte 0xC1 (would always produce overlong).",
+      "kind": "reject-invalid-utf8"
+    }
+  ]
+}

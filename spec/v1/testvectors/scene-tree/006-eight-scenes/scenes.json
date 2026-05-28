@@ -1,0 +1,42 @@
+[
+  {
+    "sceneIndex": 0,
+    "byteStart": 0,
+    "byteEnd": 25
+  },
+  {
+    "sceneIndex": 1,
+    "byteStart": 25,
+    "byteEnd": 50
+  },
+  {
+    "sceneIndex": 2,
+    "byteStart": 50,
+    "byteEnd": 75
+  },
+  {
+    "sceneIndex": 3,
+    "byteStart": 75,
+    "byteEnd": 100
+  },
+  {
+    "sceneIndex": 4,
+    "byteStart": 100,
+    "byteEnd": 125
+  },
+  {
+    "sceneIndex": 5,
+    "byteStart": 125,
+    "byteEnd": 150
+  },
+  {
+    "sceneIndex": 6,
+    "byteStart": 150,
+    "byteEnd": 175
+  },
+  {
+    "sceneIndex": 7,
+    "byteStart": 175,
+    "byteEnd": 200
+  }
+]

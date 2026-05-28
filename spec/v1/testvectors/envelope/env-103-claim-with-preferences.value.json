@@ -1,0 +1,12 @@
+{
+  "claimVersion": "urn:screenplay-registration-claim:v1",
+  "schemaId": "urn:screenplay-registration-claim-schema:v1",
+  "hashAlgorithm": "sha-256",
+  "manifestCanonicalization": "rfc8785",
+  "normalizationProfile": "screenplay-registration-norm/v1-strict",
+  "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "claimExtensions": {},
+  "preferences": {
+    "trainingMining": "notAllowed"
+  }
+}

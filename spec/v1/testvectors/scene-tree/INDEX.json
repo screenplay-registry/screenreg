@@ -1,0 +1,77 @@
+{
+  "profileId": "screenplay-registration-merkle/v1",
+  "vectors": [
+    {
+      "id": "001",
+      "name": "no-scenes",
+      "description": "No scene headings — tree contains only the padding sentinel.",
+      "sceneCount": 0
+    },
+    {
+      "id": "002",
+      "name": "single-scene-int",
+      "description": "One INT. scene.",
+      "sceneCount": 1
+    },
+    {
+      "id": "003",
+      "name": "two-scenes-int-ext",
+      "description": "Two scenes (INT then EXT).",
+      "sceneCount": 2
+    },
+    {
+      "id": "004",
+      "name": "three-scenes",
+      "description": "Three scenes — pads to 4 leaves.",
+      "sceneCount": 3
+    },
+    {
+      "id": "005",
+      "name": "five-scenes",
+      "description": "Five scenes — pads to 8 leaves.",
+      "sceneCount": 5
+    },
+    {
+      "id": "006",
+      "name": "eight-scenes",
+      "description": "Exactly 8 scenes — no padding needed (already power of 2).",
+      "sceneCount": 8
+    },
+    {
+      "id": "007",
+      "name": "thirteen-scenes",
+      "description": "Thirteen scenes — pads to 16.",
+      "sceneCount": 13
+    },
+    {
+      "id": "008",
+      "name": "with-preamble",
+      "description": "Title page bytes before the first scene heading; preamble is NOT a leaf.",
+      "sceneCount": 1
+    },
+    {
+      "id": "009",
+      "name": "lowercase-heading",
+      "description": "Heading in lowercase (\"int. room - day\") still detected (case-insensitive prefix).",
+      "sceneCount": 1
+    },
+    {
+      "id": "010",
+      "name": "fifty-scenes",
+      "description": "Fifty scenes — pads to 64 leaves; tree depth 6.",
+      "sceneCount": 50
+    },
+    {
+      "id": "011",
+      "name": "heading-not-at-line-start-not-detected",
+      "description": "A line that mentions \"INT. ROOM\" mid-line is NOT detected as a scene heading.",
+      "sceneCount": 1
+    },
+    {
+      "id": "012",
+      "name": "prefix-must-end-with-delimiter",
+      "description": "\"INT.MOON\" (no space after dot) is NOT a scene heading.",
+      "sceneCount": 0
+    }
+  ]
+}

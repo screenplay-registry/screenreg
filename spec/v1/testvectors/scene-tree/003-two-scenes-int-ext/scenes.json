@@ -1,0 +1,12 @@
+[
+  {
+    "sceneIndex": 0,
+    "byteStart": 0,
+    "byteEnd": 25
+  },
+  {
+    "sceneIndex": 1,
+    "byteStart": 25,
+    "byteEnd": 55
+  }
+]

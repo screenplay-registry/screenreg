@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "stripped-bom",
+    "count": 1
+  },
+  {
+    "kind": "applied-nfc",
+    "count": 13
+  },
+  {
+    "kind": "crlf-to-lf",
+    "count": 2
+  }
+]

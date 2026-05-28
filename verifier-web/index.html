@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Screenplay Registry Verifier (v0.1.0)</title>
+<style>
+  :root {
+    --bg: #0f0f10;
+    --fg: #f4f3ee;
+    --muted: #888782;
+    --accent: #7dd3fc;
+    --ok: #4ade80;
+    --err: #f87171;
+    --warn: #fbbf24;
+    --panel: #1a1a1c;
+    --border: #2a2a2e;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    font-family: ui-serif, Georgia, serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 1.4rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.25rem;
+  }
+  .tagline {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+  .drop {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    background: var(--panel);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop:hover, .drop.active {
+    border-color: var(--accent);
+    background: #1d2024;
+  }
+  .drop input[type="file"] {
+    display: none;
+  }
+  .drop h2 {
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 1rem;
+    margin: 0 0 0.5rem;
+    color: var(--accent);
+  }
+  .drop p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .files {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .file-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+  .file-row .kind {
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+  }
+  .file-row .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    margin: 0 0.75rem;
+    color: var(--fg);
+  }
+  .file-row .size {
+    color: var(--muted);
+  }
+  button.action {
+    margin-top: 1.5rem;
+    width: 100%;
+    padding: 0.85rem;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #0f0f10;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .result {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .result.ok { border-color: var(--ok); }
+  .result.err { border-color: var(--err); }
+  .result.pending { border-color: var(--warn); }
+  .result h3 {
+    margin: 0 0 0.75rem;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 1rem;
+  }
+  .ok h3 { color: var(--ok); }
+  .err h3 { color: var(--err); }
+  .pending h3 { color: var(--warn); }
+  footer {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  footer a { color: var(--accent); }
+  .promise {
+    margin-top: 1rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .promise strong { color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The Screenplay Registry Verifier</h1>
+  <p class="tagline">Drag in your screenplay + manifest + .ots proof. Verification runs entirely in your browser. Nothing is uploaded.</p>
+
+  <label class="drop" id="drop">
+    <h2>Drop files here, or click to choose</h2>
+    <p>Required: your <code>.fountain</code> script, the <code>.manifest.json</code> envelope, and the <code>.proof.ots</code> binary.</p>
+    <input type="file" id="file-input" multiple />
+  </label>
+
+  <div class="files" id="files"></div>
+
+  <button class="action" id="verify-btn" disabled>Verify</button>
+
+  <div id="result"></div>
+
+  <p class="promise">
+    <strong>Privacy promise:</strong> this page is fully client-side. Your script bytes never leave your browser. Open the Network tab in your dev tools — no upload requests are made.
+    Bitcoin block-header verification (when the proof references one) optionally queries a public block explorer; this version of the verifier reads the asserted block height from the proof and trusts the calendar's claim. For full trustless verification, run the CLI against your own Bitcoin node.
+  </p>
+
+  <footer>
+    The Screenplay Registry v0.1.0 — reference verifier.
+    <br />Spec: <a href="../spec/v1/">/spec/v1/</a>.
+    <br />CLI: <code>git clone https://github.com/screenplay-registry/screenreg</code> (npm publish in v0.1.1).
+  </footer>
+</div>
+<script type="module" src="./verifier.js"></script>
+</body>
+</html>

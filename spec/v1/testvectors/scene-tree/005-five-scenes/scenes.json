@@ -1,0 +1,27 @@
+[
+  {
+    "sceneIndex": 0,
+    "byteStart": 0,
+    "byteEnd": 40
+  },
+  {
+    "sceneIndex": 1,
+    "byteStart": 40,
+    "byteEnd": 80
+  },
+  {
+    "sceneIndex": 2,
+    "byteStart": 80,
+    "byteEnd": 124
+  },
+  {
+    "sceneIndex": 3,
+    "byteStart": 124,
+    "byteEnd": 164
+  },
+  {
+    "sceneIndex": 4,
+    "byteStart": 164,
+    "byteEnd": 204
+  }
+]
