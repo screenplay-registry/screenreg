@@ -38,6 +38,10 @@ export const OP_KECCAK256 = 0x67
 export const OP_APPEND = 0xf0
 export const OP_PREPEND = 0xf1
 
+// Unary ops (no-argument transforms)
+export const OP_REVERSE = 0xf2
+export const OP_HEXLIFY = 0xf3
+
 // Branch / attestation markers
 export const FORK_MARKER = 0xff
 export const ATTESTATION_MARKER = 0x00
@@ -255,9 +259,19 @@ function walkTimestamp(
       continue
     }
     if (tag === ATTESTATION_MARKER) {
-      // Read attestation type tag (8 bytes) and length-prefixed payload
+      // Read attestation type tag (8 bytes) and length-prefixed payload. The
+      // payload length is capped at TimeAttestation.MAX_PAYLOAD_SIZE = 8192
+      // bytes per the upstream notary spec — applies to unknown attestation
+      // tags too. Known tags get additional structural validation in
+      // parseAttestation.
       const attTag = r.readBytes(8)
-      const payload = r.readVarBytes()
+      const payloadLen = r.readVarUint()
+      if (payloadLen > MAX_ATTESTATION_PAYLOAD_SIZE) {
+        throw new Error(
+          `attestation payload ${payloadLen} bytes exceeds MAX_PAYLOAD_SIZE=${MAX_ATTESTATION_PAYLOAD_SIZE}`,
+        )
+      }
+      const payload = r.readBytes(payloadLen)
       attestations.push(parseAttestation(attTag, payload))
       return
     }
@@ -266,6 +280,34 @@ function walkTimestamp(
     // After applying the op, continue walking with the new msg
   }
 }
+
+/**
+ * Upstream Op.MAX_RESULT_LENGTH: the result of any op must not exceed 4096
+ * bytes. Mirrors the cap enforced by `walkOneTimestampStrict` in
+ * src/shared/anchors/ots-build.ts so the build-side validator and the
+ * verifier agree on which proofs are well-formed.
+ */
+const MAX_OP_RESULT_LENGTH = 4096
+/** Upstream BinaryOp.MAX_MSG_LENGTH on the varbytes argument. */
+const MAX_BINARY_OP_ARG_LENGTH = 4096
+/** Upstream TimeAttestation.MAX_PAYLOAD_SIZE — applies to every attestation. */
+const MAX_ATTESTATION_PAYLOAD_SIZE = 8192
+/** Upstream PendingAttestation MAX_URI_LENGTH. */
+const MAX_PENDING_URI_LENGTH = 1000
+/**
+ * Upstream PendingAttestation ALLOWED_URI_CHARS — deliberately excludes
+ * query/fragment/parameter chars (`?`, `&`, `=`, `%`, `#`, space, etc.).
+ *   ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._/:
+ */
+const PENDING_URI_ALLOWED: Set<number> = (() => {
+  const s = new Set<number>()
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const lower = 'abcdefghijklmnopqrstuvwxyz'
+  const digits = '0123456789'
+  const punct = '-._/:'
+  for (const ch of upper + lower + digits + punct) s.add(ch.charCodeAt(0))
+  return s
+})()
 
 function applyOp(opTag: number, r: Reader, msg: Buffer): Buffer {
   switch (opTag) {
@@ -276,15 +318,50 @@ function applyOp(opTag: number, r: Reader, msg: Buffer): Buffer {
     case OP_RIPEMD160:
       return createHash('ripemd160').update(msg).digest()
     case OP_KECCAK256:
-      // Node doesn't have a native keccak256; this op is rare in OTS practice
+      // Node doesn't have a native keccak256; this op is rare in OTS practice.
       throw new Error('OP_KECCAK256 not implemented in v1')
     case OP_APPEND: {
       const arg = r.readVarBytes()
-      return Buffer.concat([msg, arg])
+      if (arg.length < 1) {
+        throw new Error('applyOp: OP_APPEND arg is empty')
+      }
+      if (arg.length > MAX_BINARY_OP_ARG_LENGTH) {
+        throw new Error(`applyOp: OP_APPEND arg exceeds ${MAX_BINARY_OP_ARG_LENGTH} bytes`)
+      }
+      const result = Buffer.concat([msg, arg])
+      if (result.length > MAX_OP_RESULT_LENGTH) {
+        throw new Error(`applyOp: OP_APPEND result exceeds ${MAX_OP_RESULT_LENGTH} bytes`)
+      }
+      return result
     }
     case OP_PREPEND: {
       const arg = r.readVarBytes()
-      return Buffer.concat([arg, msg])
+      if (arg.length < 1) {
+        throw new Error('applyOp: OP_PREPEND arg is empty')
+      }
+      if (arg.length > MAX_BINARY_OP_ARG_LENGTH) {
+        throw new Error(`applyOp: OP_PREPEND arg exceeds ${MAX_BINARY_OP_ARG_LENGTH} bytes`)
+      }
+      const result = Buffer.concat([arg, msg])
+      if (result.length > MAX_OP_RESULT_LENGTH) {
+        throw new Error(`applyOp: OP_PREPEND result exceeds ${MAX_OP_RESULT_LENGTH} bytes`)
+      }
+      return result
+    }
+    case OP_REVERSE: {
+      if (msg.length > MAX_OP_RESULT_LENGTH) {
+        throw new Error(`applyOp: OP_REVERSE result exceeds ${MAX_OP_RESULT_LENGTH} bytes`)
+      }
+      const out = Buffer.alloc(msg.length)
+      for (let i = 0; i < msg.length; i++) out[i] = msg[msg.length - 1 - i]!
+      return out
+    }
+    case OP_HEXLIFY: {
+      const result = Buffer.from(msg.toString('hex'), 'ascii')
+      if (result.length > MAX_OP_RESULT_LENGTH) {
+        throw new Error(`applyOp: OP_HEXLIFY result exceeds ${MAX_OP_RESULT_LENGTH} bytes`)
+      }
+      return result
     }
     default:
       throw new Error(`unknown op tag 0x${opTag.toString(16)}`)
@@ -305,6 +382,26 @@ function parseAttestation(tag: Buffer, payload: Buffer): ParsedAttestation {
   if (tag.equals(TAG_PENDING)) {
     const r = new Reader(payload)
     const urlBytes = r.readVarBytes()
+    if (urlBytes.length === 0) {
+      throw new Error('pending attestation URI is empty')
+    }
+    if (urlBytes.length > MAX_PENDING_URI_LENGTH) {
+      throw new Error(
+        `pending attestation URI ${urlBytes.length} bytes exceeds MAX_URI_LENGTH=${MAX_PENDING_URI_LENGTH}`,
+      )
+    }
+    for (let i = 0; i < urlBytes.length; i++) {
+      if (!PENDING_URI_ALLOWED.has(urlBytes[i]!)) {
+        throw new Error(
+          `pending attestation URI contains invalid byte 0x${urlBytes[i]!.toString(16).padStart(2, '0')} at offset ${i}`,
+        )
+      }
+    }
+    if (!r.eof()) {
+      throw new Error(
+        `pending attestation payload has ${r.remaining()} trailing bytes past URI`,
+      )
+    }
     return { kind: 'pending', calendarUrl: urlBytes.toString('utf8') }
   }
   return { kind: 'unknown', tag: tag.toString('hex'), payloadHex: payload.toString('hex') }
