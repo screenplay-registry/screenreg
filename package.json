@@ -77,5 +77,8 @@
   "dependencies": {
     "drand-client": "^1.4.2",
     "tlock-js": "^0.9.0"
+  },
+  "optionalDependencies": {
+    "pdf2json": "^4.0.3"
   }
 }
