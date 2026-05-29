@@ -28,12 +28,12 @@ python3 -m http.server 8000
   height and trusts the calendar's claim that the file_digest leads to it.
 - Verify the Bitcoin block hash at the asserted height against the canonical
   Bitcoin chain. NEITHER the CLI nor this browser verifier performs full
-  SPV / block-header verification in v0.x — both check OTS proof structure
-  and report the asserted block height + calendar attestations. For true
-  independent block-header verification, run upstream `ots verify` against
-  the opentimestamps-client (it queries Bitcoin Core or a public Bitcoin
-  node). Full in-process SPV with bundled checkpoints + public-explorer
-  fallback ships in v0.2 per the README roadmap.
+  SPV / block-header verification — both check OTS proof structure and
+  report the asserted block height + calendar attestations. For independent
+  block-header verification, run upstream `ots verify` from the
+  opentimestamps-client (it queries Bitcoin Core or a public Bitcoin node).
+  Bringing full in-process SPV into the reference verifier is deferred to a
+  future minor release.
 - Verify the scene-tree Merkle root.
 - Decrypt encrypted manifest fields.
 

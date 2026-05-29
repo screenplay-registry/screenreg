@@ -14,11 +14,30 @@ For you, the benefit is a standards-based registration flow with no per-registra
 
 ## Integration paths
 
-### Path A: shell out to the CLI (simplest)
+### Path A: browser handoff (least integration; ~30 min)
+
+Add a "Register on screenplayregistry.org" menu item that:
+1. Exports the current document to a temporary `.fountain` file.
+2. Opens the user's default browser to `https://screenplayregistry.org/create/`.
+3. Surfaces a short note prompting them to drag the temp file into the page.
+
+The page handles the hash, calendar fan-out, and proof assembly entirely client-side; your tool never sees the resulting `manifest.json` or `proof.ots` (the user downloads them from the page). Use this when you want zero registration logic in your binary and zero dependency on the screenreg npm package.
+
+### Path B: shell out to the CLI (simplest in-process flow)
 
 Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. Drop the produced `.manifest.json` + `.proof.ots` in a registrations subdirectory next to the script.
 
 This works in any tool that can spawn a subprocess. Total integration effort: ~1 hour.
+
+If the user is registering a PDF screenplay (Final Draft export, archived PDF, etc.), use the two-step PDF flow:
+
+```bash
+screenreg extract draft.pdf > draft.fountain    # surfaces output for user review
+# (host tool's UX should let the user inspect/edit draft.fountain here)
+screenreg register draft.fountain --source-pdf draft.pdf
+#   → envelope.evidenceBundle.bundleExtensions.sourceExtractor records
+#     extractor name+version + sourcePdfSha256 + extractedFountainSha256
+```
 
 ```bash
 screenreg register screenplay.fountain --envelope-out registrations/v1.manifest.json --ots-out registrations/v1.proof.ots

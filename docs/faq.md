@@ -2,6 +2,37 @@
 
 ---
 
+## How do I actually register a screenplay?
+
+Two options, equivalent in evidentiary weight:
+
+**Browser (recommended for one-off registrations).** Drag your `.fountain` file into [screenplayregistry.org/create/](https://screenplayregistry.org/create/). The page hashes locally and gives back `manifest.json` + `proof.ots`. No account, no install, no upload.
+
+**CLI (for batch / scripted use).** Install once (`git clone` + `npm install`), then run `./bin/screenreg.mjs register draft.fountain`. Two files appear next to the script.
+
+Verification is the same in either path: drag-drop the original screenplay + the two artifacts at [screenplayregistry.org/verify/](https://screenplayregistry.org/verify/), or run `screenreg verify <file> <manifest> <ots>`.
+
+---
+
+## I have a PDF, not a Fountain file. Can I register that?
+
+Yes, in v0.2 the CLI can extract a PDF to Fountain text:
+
+```bash
+screenreg extract draft.pdf > draft.fountain   # extracts FD-convention text PDFs
+# REVIEW draft.fountain — the extractor is heuristic and can mis-classify
+# edge cases like dual dialogue side-by-side or unusual layouts. Edit as needed.
+screenreg register draft.fountain --source-pdf draft.pdf
+```
+
+`--source-pdf` records the source-PDF SHA-256 + the extractor's name and version in `evidenceBundle.bundleExtensions.sourceExtractor`, so an archival verifier can prove the registered Fountain came from the asserted PDF.
+
+The browser `/create/` page detects PDF drops and surfaces the CLI command. Browser-native PDF extraction is on the roadmap; it needs a browser-compatible PDF parser that won't bloat the page beyond the privacy-first design goals.
+
+PDFs the reference extractor cannot handle (scanned image-only, password-encrypted, multi-column shooting drafts) reject with a typed exit code so you know which alternate path to take.
+
+---
+
 ## Is this a substitute for the US Copyright Office?
 
 **No.** The Copyright Office gives you federal-court statutory damages + attorney's fees in an infringement suit. This protocol gives you cryptographic evidence that complements that. For maximum protection, register with the Copyright Office AND create a protocol proof. See [`comparison.md`](comparison.md) for details.
