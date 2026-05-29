@@ -4,6 +4,45 @@ All notable changes to The Screenplay Registry are documented here. The format f
 
 The **commitment-bearing identifiers** (URN namespace, profile IDs, normalization profile, hash algorithm, canonicalization scheme) are locked at v1 and will never change within the v1 line. Forward-compatible additions land via new URNs in v2+.
 
+## [0.2.0] — Browser-native register + PDF input
+
+The v0.1.0 reference shipped CLI-only. v0.2 makes the protocol usable from a browser tab and lays in the PDF-as-source flow without changing any commitment-bearing surface.
+
+### Browser
+
+- **`/create/` page** — drag a `.fountain` file, get back `manifest.json` + `proof.ots`. Script content never leaves the tab; only the 32-byte SHA-256 claim hash is sent to the OpenTimestamps public calendars. No account, no upload, no analytics, no third-party scripts.
+- **Cross-runtime shared modules** at `src/shared/` — normalize, canonicalize, claim-hash, envelope build, and OTS proof builder are now compiled for both Node and the browser via `tsconfig.browser.json`. The same source produces the CLI's bytes and the browser's bytes; cross-impl byte-parity tests assert that on every input in the corpus.
+- **Multi-calendar quorum** — page POSTs the claim hash to four canonical OTS calendars (a.pool, alice.btc, bob.btc, finney) in parallel with a 15s per-calendar timeout. Requires ≥2 of 4 successful responses; failures surface inline with per-calendar reasons.
+- **Strict calendar-response gate** — `isValidTimestampSubtree` walks each calendar response with terminal-attestation enforcement, attestation-tag allowlist (Bitcoin / Litecoin / Pending), Pending URI charset + 1000-byte length cap (matching upstream OTS), OP_APPEND/PREPEND args 1..4096 bytes, message-length tracking enforcing Op.MAX_RESULT_LENGTH=4096, and OP_REVERSE/OP_HEXLIFY unary ops. Rejects HTML, redirects, truncated responses, unknown attestation tags, malformed URIs.
+- **Cloudflare Pages headers** — `landing/_headers` ships strict CSP (script-src 'self', no inline JS; connect-src restricted to the four OTS calendars), Strict-Transport-Security preload-eligible, X-Frame-Options DENY, Permissions-Policy locking down every sensor / payment / clipboard API, COOP/CORP same-origin.
+
+### PDF input
+
+- **Pluggable `PdfExtractor` contract** at `src/extractors/types.ts` — operators ship their own extractors for non-FD dialects (OCR, multi-column shooting drafts, bilingual layouts) by exporting a default value conforming to the interface.
+- **`screenreg-reference` extractor** at `src/extractors/reference/` — handles FD-convention text PDFs (Final Draft, Highland, WriterDuet, Fade In, Trelby, Slugline). Classifies each line by `(x-position, content rules)` into scene-heading / action / character / parenthetical / dialogue / transition. Strips page numbers and scene numbers by default; opt-out via flags.
+- **`screenreg extract <input.pdf>` CLI subcommand** — writes Fountain to stdout (or `--out PATH`). Typed exit codes per `ExtractorError.code` (10–15) so shell scripts can react to specific failure reasons (`EXTRACT_NO_TEXT_LAYER`, `EXTRACT_ENCRYPTED`, `EXTRACT_UNSUPPORTED_LAYOUT`, `EXTRACT_CORRUPTED`, `EXTRACT_AMBIGUOUS_BLOCKS`, `EXTRACT_DEPENDENCY_MISSING`).
+- **Source-PDF provenance** — `screenreg register --source-pdf <pdf>` records `evidenceBundle.bundleExtensions.sourceExtractor` with extractor `name + version`, SHA-256 of the source PDF, SHA-256 of the Fountain that was actually registered, and the source filename. This proves which PDF the writer claims as source and pins the Fountain content; it does NOT prove the Fountain is the verbatim output of running `screenreg extract` on the PDF (a writer may edit the extracted Fountain before registering). An archival verifier who wants byte-identical reproducibility must re-run the extractor against the source PDF and compare to the registered Fountain hash themselves.
+- **No new normalization profile** — `screenplay-registration-norm/v1-strict` remains the only commitment layer. PDF is one input source among many; Fountain stays canonical.
+
+### Parser hardening
+
+The `parseOts` verifier now enforces every cap that the browser-side strict walker enforces, ending the previous gate-accepts/parser-rejects asymmetry:
+
+- `TimeAttestation.MAX_PAYLOAD_SIZE=8192` on every attestation, including unknown tags.
+- Pending attestation URIs: non-empty, ≤ 1000 bytes, character allowlist matching upstream `notary.py`, no trailing bytes past the URI.
+- `OP_APPEND` / `OP_PREPEND`: arg ∈ [1, 4096], result ≤ 4096.
+- `OP_REVERSE` / `OP_HEXLIFY`: result ≤ 4096.
+- Loose position-only walker removed — `splitOtsForRoundTrip` now uses the strict walker so one set of semantics applies everywhere.
+
+### Other
+
+- `globalThis.crypto.subtle` replaces `node:crypto` in shared modules so the same source runs on Node 20+ and every evergreen browser without a parallel implementation surface.
+- Cross-impl test corpus expanded with double-leading-BOM, triple-leading-BOM, embedded BOM at multiple positions, mixed CRLF/LF/CR line endings, NFC-decomposed sequences, supplementary-plane characters, lone surrogates, and OTS calendar URIs at character + length boundaries.
+
+### Compatibility
+
+No v1 commitment-bearing surface changed in v0.2: the normalization profile ID (`screenplay-registration-norm/v1-strict`), the canonicalization scheme (RFC 8785 JCS), the claim and envelope URN namespaces, the scene-tree and paragraph-tree profile IDs and domain tags, the AES-256-GCM AAD format, and the Ed25519 registrant wire format are all unchanged byte-for-byte. The new `evidenceBundle.bundleExtensions.sourceExtractor` block is additive and non-committing. Cross-version regression testing of v0.1.0 envelopes against v0.2 verification is tracked as ongoing work; if you re-verify a v0.1.0 proof under v0.2 and see a difference, please file an issue.
+
 ## [0.1.0] — Initial public release
 
 The first public release of the protocol + reference TypeScript implementation. Pre-launch development was conducted privately with extensive adversarial review.
@@ -60,11 +99,11 @@ The first public release of the protocol + reference TypeScript implementation. 
 - **Phase 3** (sustained adoption): fiscal sponsorship under Linux Foundation OpenSSF or equivalent
 - All commitment-bearing identifiers are URN-based and brand-neutral — a future stewardship transition does not invalidate any v1 proof
 
-### Known limitations + v0.2 roadmap
+### Known limitations + roadmap
 
-- v0.x verifier validates OTS proof structure but does NOT yet perform full SPV / Bitcoin-header verification (lands in v0.2 with checkpoints + public-explorer fallback)
-- v0.x registration is CLI-only; browser-native register flow ships in v0.2
-- v0.x KDF (PBKDF2) is CPU-hard but not memory-hard; v2 migration to Argon2id planned
+- The reference verifier validates OTS proof structure but does NOT yet perform full SPV / Bitcoin-header verification against a local Bitcoin node. Today an operator who wants block-header confirmation runs `ots verify` from `opentimestamps-client` against the upgraded `.ots`. Bringing SPV into the reference verifier is deferred to a future minor release.
+- v0.1.0 registration is CLI-only; the browser-native register flow ships in [0.2.0].
+- The KDF (PBKDF2-HMAC-SHA256, 600k iterations) is CPU-hard but not memory-hard; v2 migration to Argon2id is planned.
 
 ### Licenses
 
