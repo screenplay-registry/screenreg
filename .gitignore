@@ -10,3 +10,5 @@ coverage/
 .venv/
 __pycache__/
 *.pyc
+landing/verify/
+landing/create/lib/

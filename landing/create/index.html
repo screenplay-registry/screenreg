@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Create a proof — The Screenplay Registry</title>
+<meta name="description" content="Create a private, dated cryptographic proof that your screenplay existed today. Anchored to Bitcoin via OpenTimestamps. Script never leaves your browser." />
+<meta name="referrer" content="no-referrer" />
+<style>
+  :root {
+    --bg: #f6f5f0;
+    --paper: #fbfaf6;
+    --ink: #161412;
+    --ink-soft: #2d2a25;
+    --muted: #6a655c;
+    --rule: #d8d4c8;
+    --rule-soft: #e8e4d8;
+    --accent: #b3261a;
+    --accent-dark: #6e1a10;
+    --accent-soft: rgba(179, 38, 26, 0.08);
+    --code-bg: #ece8dc;
+    --ok: #2e6a3a;
+    --err: #8a1a10;
+    --pending: #8a6510;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--bg);
+    font-family: ui-serif, "Iowan Old Style", "Charter", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .mono, code, pre { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; }
+  h1, h2 {
+    font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding: 0 2px 1px;
+  }
+  a:hover { background: var(--accent); color: var(--paper); }
+
+  .topbar {
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 14px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .topbar a { color: var(--ink); border: none; padding: 0; }
+  .topbar a:hover { background: transparent; color: var(--accent); }
+  .brand { font-weight: 700; }
+  .topbar nav { display: flex; gap: 24px; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 48px 28px 64px; }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 18px;
+    max-width: 22ch;
+    font-weight: 500;
+  }
+  h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+  .lede {
+    max-width: 60ch;
+    font-size: 18px;
+    line-height: 1.55;
+    margin: 0 0 36px;
+    color: var(--ink-soft);
+  }
+
+  .drop {
+    border: 2px dashed var(--rule);
+    background: var(--paper);
+    padding: 56px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 80ms, background 80ms;
+    margin-bottom: 12px;
+  }
+  .drop.hover { border-color: var(--accent); background: var(--accent-soft); }
+  .drop p { margin: 0; font-size: 17px; color: var(--ink-soft); }
+  .drop .hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 12px;
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 0.02em;
+  }
+  .drop .file-name {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 15px;
+    color: var(--ink);
+    margin-top: 8px;
+  }
+  .drop input[type=file] { display: none; }
+
+  .privacy-note {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 14px 0 32px;
+    line-height: 1.55;
+  }
+  .privacy-note strong { color: var(--ink); font-weight: 600; }
+
+  .compute-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 32px;
+    font-family: "American Typewriter", "Courier Prime", monospace;
+    font-weight: 700;
+    font-size: 17px;
+    border: 1.5px solid var(--accent);
+    background: var(--accent);
+    color: var(--paper);
+    cursor: pointer;
+    transition: background 80ms, border-color 80ms, opacity 80ms;
+  }
+  .compute-btn:hover:not(:disabled) {
+    background: var(--accent-dark);
+    border-color: var(--accent-dark);
+  }
+  .compute-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .steps {
+    margin-top: 36px;
+    border-top: 1px solid var(--rule);
+    padding-top: 28px;
+  }
+  .steps h2 {
+    font-size: 16px;
+    margin: 0 0 16px;
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px dashed var(--rule-soft);
+    font-size: 15px;
+  }
+  .step:last-child { border-bottom: none; }
+  .step .mark {
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--rule);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--paper);
+    margin-top: 1px;
+  }
+  .step.active .mark { border-color: var(--accent); color: var(--accent); }
+  .step.done .mark { border-color: var(--ok); color: var(--ok); background: var(--ok); color: var(--paper); }
+  .step.err .mark { border-color: var(--err); color: var(--err); }
+  .step .body .title { font-weight: 600; color: var(--ink); }
+  .step .body .detail {
+    margin-top: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
+    color: var(--ink-soft);
+    word-break: break-all;
+  }
+  .step .body .detail.muted { color: var(--muted); font-style: italic; }
+  .step .body .detail.err { color: var(--err); }
+
+  .downloads {
+    margin-top: 28px;
+    padding: 20px 22px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  .downloads h2 {
+    font-size: 16px;
+    margin: 0 0 14px;
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .downloads .links {
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 22px;
+    font-family: "American Typewriter", "Courier Prime", monospace;
+    font-weight: 700;
+    font-size: 15px;
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .download-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .downloads .note {
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+  .downloads .note .mono { color: var(--ink); }
+
+  .calendars {
+    margin-top: 8px;
+    list-style: none;
+    padding: 0;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
+  }
+  .calendars li {
+    padding: 4px 0;
+    color: var(--ink-soft);
+  }
+  .calendars li .badge {
+    display: inline-block;
+    min-width: 56px;
+    margin-right: 8px;
+    padding: 1px 6px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    border-radius: 3px;
+  }
+  .calendars li .badge.pending { background: rgba(138, 101, 16, 0.12); color: var(--pending); }
+  .calendars li .badge.ok { background: rgba(46, 106, 58, 0.12); color: var(--ok); }
+  .calendars li .badge.err { background: rgba(138, 26, 16, 0.12); color: var(--err); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer a { color: var(--ink-soft); border-bottom: 1px solid var(--rule); padding: 0; }
+  footer a:hover { background: transparent; color: var(--accent); border-bottom-color: var(--accent); }
+
+  @media (max-width: 760px) {
+    main { padding: 32px 20px; }
+    h1 { font-size: 28px; }
+    .drop { padding: 36px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><a href="/">The Screenplay Registry</a></span>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/verify/">Verify a proof</a>
+      <a href="https://github.com/screenplay-registry/screenreg">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <h1>Create a private, dated proof that your screenplay <em>existed today.</em></h1>
+  <p class="lede">
+    Drop your <span class="mono">.fountain</span> file below. Your computer hashes it locally, and only the 32-byte fingerprint is sent to public Bitcoin-timestamping calendars. The script content never leaves your browser.
+  </p>
+
+  <label class="drop" id="dropZone">
+    <p>Drag a <span class="mono">.fountain</span> file here, or click to choose.</p>
+    <p class="hint">UTF-8 plain text. Up to 8 MB.</p>
+    <p class="file-name" id="fileName"></p>
+    <input type="file" id="fileInput" accept=".fountain,.txt,text/plain,.pdf,application/pdf" />
+  </label>
+
+  <p class="privacy-note">
+    <strong>Privacy.</strong> Hashing runs entirely in this tab. A 32-byte SHA-256 of the canonical bytes is the only data that leaves your machine, and it goes only to the OpenTimestamps public calendars listed below — the same destinations the <span class="mono">screenreg</span> CLI uses.
+  </p>
+
+  <div class="options" style="margin: 28px 0 12px;">
+    <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer;">
+      <input type="checkbox" id="optIdentity" style="margin-top: 4px;" />
+      <span>
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Bind my identity (Ed25519).</strong>
+        Generates a fresh Ed25519 keypair, signs the claim body, and embeds
+        the public key in the manifest. You will download the matching
+        <span class="mono">.pem</span> private key alongside the proof —
+        keep it safe; lose it and you lose the ability to later prove key
+        control via challenge-response.
+      </span>
+    </label>
+
+    <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
+      <input type="checkbox" id="optSceneTree" style="margin-top: 4px;" checked />
+      <span>
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Embed scene-tree Merkle root.</strong>
+        Detects scene headings (<span class="mono">INT.</span> / <span class="mono">EXT.</span> / <span class="mono">EST.</span> / <span class="mono">INT/EXT.</span>) in the Fountain bytes and commits a Merkle root of per-scene hashes. Lets you later prove "scene 47 was in my registered script" without revealing the rest. Adds ~milliseconds to the compute step.
+      </span>
+    </label>
+
+    <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
+      <input type="checkbox" id="optEncrypt" style="margin-top: 4px;" />
+      <span>
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Encrypt title and author with a password.</strong>
+        AES-256-GCM, PBKDF2-HMAC-SHA256 at 600,000 iterations. The
+        ciphertext is committed in the claim; the plaintext stays with
+        you. Anyone with the password can decrypt; anyone without sees
+        only the encrypted ciphertext and length-padded buckets.
+      </span>
+    </label>
+
+    <div id="encryptInputs" hidden style="margin: 10px 0 0 28px; display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; font-size: 14px;">
+      <label for="encTitle" style="align-self: center;">Title</label>
+      <input type="text" id="encTitle" placeholder="(optional — left blank, omitted)" style="padding: 6px 10px; font-family: ui-monospace, monospace; font-size: 13px; border: 1px solid var(--rule);" />
+      <label for="encAuthor" style="align-self: center;">Author</label>
+      <input type="text" id="encAuthor" placeholder="(optional — left blank, omitted)" style="padding: 6px 10px; font-family: ui-monospace, monospace; font-size: 13px; border: 1px solid var(--rule);" />
+      <label for="encPassword" style="align-self: center;">Password</label>
+      <input type="password" id="encPassword" placeholder="Min 12 characters recommended" style="padding: 6px 10px; font-family: ui-monospace, monospace; font-size: 13px; border: 1px solid var(--rule);" />
+      <label for="encPassword2" style="align-self: center;">Confirm</label>
+      <input type="password" id="encPassword2" placeholder="Repeat password" style="padding: 6px 10px; font-family: ui-monospace, monospace; font-size: 13px; border: 1px solid var(--rule);" />
+    </div>
+  </div>
+
+  <button class="compute-btn" id="computeBtn" disabled>
+    <span class="arrow">→</span> Create the proof
+  </button>
+
+  <section class="steps" id="stepsRoot" hidden>
+    <h2>Progress</h2>
+    <div class="step" data-step="normalize"><div class="mark">1</div><div class="body"><div class="title">Normalize bytes (v1-strict)</div><div class="detail muted" data-detail>UTF-8, NFC, LF, BOM strip</div></div></div>
+    <div class="step" data-step="content-hash"><div class="mark">2</div><div class="body"><div class="title">Content hash (SHA-256)</div><div class="detail muted" data-detail>—</div></div></div>
+    <div class="step" data-step="claim"><div class="mark">3</div><div class="body"><div class="title">Build committed claim</div><div class="detail muted" data-detail>—</div></div></div>
+    <div class="step" data-step="claim-hash"><div class="mark">4</div><div class="body"><div class="title">Claim hash (canonicalized)</div><div class="detail muted" data-detail>—</div></div></div>
+    <div class="step" data-step="calendars"><div class="mark">5</div><div class="body"><div class="title">Submit digest to OpenTimestamps calendars</div><div class="detail muted" data-detail>—</div><ul class="calendars" id="calendarList"></ul></div></div>
+    <div class="step" data-step="ots"><div class="mark">6</div><div class="body"><div class="title">Assemble <span class="mono">.proof.ots</span></div><div class="detail muted" data-detail>—</div></div></div>
+  </section>
+
+  <section class="downloads" id="downloads" hidden>
+    <h2>Your proof artifacts</h2>
+    <div class="links">
+      <a class="download-btn" id="downloadManifest"><span>→</span> manifest.json</a>
+      <a class="download-btn" id="downloadProof"><span>→</span> proof.ots</a>
+      <a class="download-btn" id="downloadIdentityKey" hidden><span>→</span> identity.pem</a>
+    </div>
+    <p class="note">
+      Keep both files together — verification requires the original screenplay file plus these two artifacts. In about 1–6 hours, run <span class="mono">screenreg upgrade proof.ots</span> (or come back to the <a href="/verify/">verify page</a>) to fold in the Bitcoin block attestation.
+    </p>
+  </section>
+</main>
+
+<footer>
+  <span>No analytics. No third-party scripts. No tracking. Hashing runs locally.</span>
+  <span>v0.2 · cryptographic-screenplay-timestamping protocol</span>
+</footer>
+
+<script type="module" src="./create.js"></script>
+</body>
+</html>

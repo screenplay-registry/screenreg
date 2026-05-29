@@ -59,7 +59,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:all": "tsc -p tsconfig.all.json",
     "check": "npm run typecheck:all && npm run test",
-    "cli": "tsx src/cli/main.ts"
+    "cli": "tsx src/cli/main.ts",
+    "build:browser": "tsc -p tsconfig.browser.json",
+    "build:verify": "node scripts/build-landing-verify.mjs",
+    "build:landing": "npm run build:browser && npm run build:verify"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
