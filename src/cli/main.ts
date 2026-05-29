@@ -297,6 +297,13 @@ interface RegisterOptions {
   identityKeyOut?: string
   /** Parent registration's claim hash (for revision lineage) */
   previousClaimHash?: string
+  /**
+   * Path to the source PDF this Fountain was extracted from. When set, the
+   * envelope records `evidenceBundle.bundleExtensions.sourceExtractor` so an
+   * archival verifier can prove the registered text came from the asserted
+   * PDF (by hashing the PDF and matching against the recorded sha256).
+   */
+  sourcePdf?: string
 }
 
 async function cmdRegister(opts: RegisterOptions): Promise<void> {
@@ -420,6 +427,36 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
     process.stderr.write(`  Private comparison bundle: ${bundlePath} (0600, exclusive create — KEEP PRIVATE)\n`)
   }
 
+  // If the writer registered a Fountain that was extracted from a PDF, record
+  // the source-PDF provenance in evidenceBundle.bundleExtensions so an
+  // archival verifier can prove the Fountain was derived from the asserted
+  // PDF. The sourceExtractor block captures the extractor identity, the SHA-256
+  // of the PDF bytes, and the SHA-256 of the extracted Fountain bytes; a
+  // verifier reproduces the extraction and checks both hashes.
+  const bundleExtensions: Record<string, unknown> = {}
+  if (opts.sourcePdf !== undefined) {
+    let pdfBytes: Buffer
+    try {
+      pdfBytes = readFileSync(opts.sourcePdf)
+    } catch (err) {
+      die(
+        `--source-pdf: cannot read ${opts.sourcePdf}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+    const { createHash } = await import('node:crypto')
+    const pdfDigest = 'sha256:' + createHash('sha256').update(pdfBytes).digest('hex')
+    const fountainDigest = cHash
+    const { ReferenceExtractor } = await import('../extractors/reference/index.js')
+    const extractor = new ReferenceExtractor()
+    bundleExtensions.sourceExtractor = {
+      name: extractor.name,
+      version: extractor.version,
+      sourcePdfSha256: pdfDigest,
+      extractedFountainSha256: fountainDigest,
+      sourcePdfFilename: basename(opts.sourcePdf),
+    }
+  }
+
   const envelope = buildEnvelope(claim, {
     proofs: [
       {
@@ -429,6 +466,7 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
         submittedAt: new Date().toISOString(),
       },
     ],
+    bundleExtensions,
   })
 
   const envelopeOutputPath = opts.envelopeOut ?? getEnvelopeOutputPath(opts.inputFile)
@@ -1187,7 +1225,97 @@ function printUsage(): void {
   ${CLI_NAME} scene-prove <file> <envelope> <sceneIndex>
   ${CLI_NAME} scene-verify <root> <sceneContent-base64> <proof.json>
   ${CLI_NAME} decrypt-field <envelope> <fieldName>
+  ${CLI_NAME} extract <input.pdf> [--out PATH] [--preserve-page-numbers]
+                       [--preserve-scene-numbers]
+                       Extracts a PDF to Fountain text via the reference
+                       extractor. Writes to stdout by default; --out PATH
+                       writes to a file (with a confidence summary on
+                       stderr). Recommended flow: extract, manually review
+                       the .fountain output, then register that file.
 `)
+}
+
+interface ExtractOptions {
+  outPath: string | undefined
+  stripPageNumbers: boolean
+  stripSceneNumbers: boolean
+}
+
+async function cmdExtract(inputFile: string, opts: ExtractOptions): Promise<void> {
+  // The reference extractor is loaded lazily so users who never extract a
+  // PDF never pay the pdf2json install / load cost. ExtractorError surfaces
+  // typed failure codes; this CLI maps each code to a stable exit status so
+  // shell scripts can react to the specific rejection reason.
+  let extractorModule
+  try {
+    extractorModule = await import('../extractors/reference/index.js')
+  } catch (err) {
+    die(
+      `extract: failed to load reference extractor: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
+  const extractor = extractorModule.default
+
+  let pdfBytes: Uint8Array
+  try {
+    const buf = readFileSync(inputFile)
+    pdfBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  } catch (err) {
+    die(`extract: cannot read ${inputFile}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const result = await extractor.extract(pdfBytes, {
+      stripPageNumbers: opts.stripPageNumbers,
+      stripSceneNumbers: opts.stripSceneNumbers,
+    })
+    const outBytes = Buffer.from(result.fountain, 'utf8')
+    if (opts.outPath !== undefined) {
+      writeFileSync(opts.outPath, outBytes)
+      process.stderr.write(
+        `✓ extracted ${outBytes.length} bytes (confidence ${result.confidence.toFixed(2)}) → ${opts.outPath}\n`,
+      )
+      if (result.confidence < 0.85) {
+        process.stderr.write(
+          `⚠  confidence ${result.confidence.toFixed(2)} < 0.85 — review the extracted Fountain before registering.\n`,
+        )
+      }
+    } else {
+      process.stdout.write(outBytes)
+      // No success line on stderr in stdout mode; the user's pipeline will
+      // see Fountain on stdout and any warnings on stderr.
+      if (result.confidence < 0.85) {
+        process.stderr.write(
+          `⚠  confidence ${result.confidence.toFixed(2)} < 0.85 — review the extracted Fountain before registering.\n`,
+        )
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && 'code' in err) {
+      const code = (err as { code: unknown }).code
+      // Map typed extractor codes to stable exit statuses for scripts.
+      const exitByCode: Record<string, number> = {
+        EXTRACT_NO_TEXT_LAYER: 10,
+        EXTRACT_ENCRYPTED: 11,
+        EXTRACT_UNSUPPORTED_LAYOUT: 12,
+        EXTRACT_CORRUPTED: 13,
+        EXTRACT_AMBIGUOUS_BLOCKS: 14,
+        EXTRACT_DEPENDENCY_MISSING: 15,
+      }
+      const exit = typeof code === 'string' ? exitByCode[code] ?? 2 : 2
+      process.stderr.write(
+        `extract failed [${typeof code === 'string' ? code : 'UNKNOWN'}]: ${err.message}\n`,
+      )
+      if (code === 'EXTRACT_DEPENDENCY_MISSING') {
+        process.stderr.write(
+          `\nTo install: npm install pdf2json\n` +
+            `Or use a different PdfExtractor implementation.\n`,
+        )
+      }
+      process.exit(exit)
+    }
+    die(`extract failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 async function main(): Promise<void> {
@@ -1232,6 +1360,7 @@ async function main(): Promise<void> {
         else if (a === '--identity') opts.identity = true
         else if (a === '--identity-key-out') opts.identityKeyOut = requireArg(a, rest[++i])
         else if (a === '--previous-claim-hash') opts.previousClaimHash = requireArg(a, rest[++i])
+        else if (a === '--source-pdf') opts.sourcePdf = requireArg(a, rest[++i])
         else if (!opts.inputFile) opts.inputFile = a
         else die(`unexpected positional argument: ${a}`)
       }
@@ -1353,6 +1482,37 @@ async function main(): Promise<void> {
       if (rest.length < 2) die('decrypt-field: need <envelope> <fieldName>')
       await cmdDecryptField(rest[0]!, rest[1]!)
       return
+    case 'extract': {
+      const positional: string[] = []
+      let outPath: string | undefined
+      let stripPageNumbers = true
+      let stripSceneNumbers = true
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--out' || a === '-o') {
+          if (rest[i + 1] === undefined) die('--out requires an argument')
+          outPath = rest[++i]
+        } else if (a === '--preserve-page-numbers') {
+          stripPageNumbers = false
+        } else if (a === '--preserve-scene-numbers') {
+          stripSceneNumbers = false
+        } else {
+          positional.push(a)
+        }
+      }
+      if (positional.length < 1) {
+        die(
+          'extract: need <input.pdf> [--out <file.fountain>]\n' +
+            '         (no --out → writes Fountain to stdout)',
+        )
+      }
+      await cmdExtract(positional[0]!, {
+        outPath,
+        stripPageNumbers,
+        stripSceneNumbers,
+      })
+      return
+    }
     default:
       printUsage()
       die(`unknown command: ${cmd}`, 1)
