@@ -284,6 +284,80 @@ function validateEvidenceProof(value: unknown, idx: number, errors: string[]): v
   const p = value as Record<string, unknown>
   requireNonEmptyString(errors, `${path}.type`, p.type)
   requireSha256Hash(errors, `${path}.claimHash`, p.claimHash)
+  // Known proof types get strict shape validation; unknown types stay open-ended
+  // (additionalProperties: true in schema) and are tolerated per spec §02 §4.2.
+  if (p.type === 'ethereum-anchor') {
+    validateEthereumAnchorProof(p, path, errors)
+  }
+}
+
+const ETH_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const ETH_TX_HASH = /^0x[0-9a-fA-F]{64}$/
+const ETHEREUM_ANCHOR_EVIDENCE_PROFILE =
+  'urn:screenplay-registration-evidence-ethereum-anchor:v1'
+
+/**
+ * Strict shape validation for an `ethereum-anchor` evidence proof (spec §09).
+ *
+ * The on-chain anchor is a secondary, additive witness; this is shape-only
+ * validation (no RPC). It enforces the six required on-chain coordinate fields,
+ * the optional `profile` const, and the membership-oracle boundary: a script
+ * `contentHash` MUST NOT travel with an on-chain record, at any nesting depth.
+ */
+function validateEthereumAnchorProof(
+  p: Record<string, unknown>,
+  path: string,
+  errors: string[],
+): void {
+  requireNonNegativeInteger(errors, `${path}.chainId`, p.chainId)
+  if (typeof p.chainId === 'number' && Number.isInteger(p.chainId) && p.chainId < 1) {
+    errors.push(`${path}.chainId: must be >= 1`)
+  }
+  requirePatternedString(errors, `${path}.contract`, p.contract, ETH_ADDRESS)
+  requirePatternedString(errors, `${path}.registrant`, p.registrant, ETH_ADDRESS)
+  requirePatternedString(errors, `${path}.txHash`, p.txHash, ETH_TX_HASH)
+  requireNonNegativeInteger(errors, `${path}.logIndex`, p.logIndex)
+  requireNonNegativeInteger(errors, `${path}.blockNumber`, p.blockNumber)
+  if (p.profile !== undefined && p.profile !== ETHEREUM_ANCHOR_EVIDENCE_PROFILE) {
+    errors.push(
+      `${path}.profile: expected ${JSON.stringify(ETHEREUM_ANCHOR_EVIDENCE_PROFILE)}, got ${JSON.stringify(p.profile)}`,
+    )
+  }
+  rejectKeyDeep(p, 'contentHash', path, errors)
+}
+
+/**
+ * Reject the presence of `key` anywhere in `obj` (top-level or nested), bounded
+ * by a maximum recursion depth to keep an adversarial deeply-nested input from
+ * exhausting the stack. Used to keep `contentHash` (the script fingerprint) off
+ * any on-chain-anchor proof — its presence would turn the public ledger into a
+ * membership oracle for the work.
+ */
+function rejectKeyDeep(
+  obj: Record<string, unknown>,
+  key: string,
+  path: string,
+  errors: string[],
+  depth = 0,
+): void {
+  if (depth > 16) return
+  for (const k of Object.keys(obj)) {
+    if (k === key) {
+      errors.push(
+        `${path}.${k}: contentHash is not permitted on an ethereum-anchor proof (membership-oracle boundary)`,
+      )
+    }
+    const v = obj[k]
+    if (isPlainObject(v)) {
+      rejectKeyDeep(v, key, `${path}.${k}`, errors, depth + 1)
+    } else if (Array.isArray(v)) {
+      v.forEach((item, i) => {
+        if (isPlainObject(item)) {
+          rejectKeyDeep(item, key, `${path}.${k}[${i}]`, errors, depth + 1)
+        }
+      })
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

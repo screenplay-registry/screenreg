@@ -31,6 +31,8 @@ export {
   type EvidenceBundle,
   type EvidenceProof,
   type OpenTimestampsProof,
+  type EthereumAnchorProof,
+  type EthereumAnchorBatch,
   type Envelope,
   type EncryptedFieldsBlock,
   type EncryptedField,
@@ -149,3 +151,30 @@ export {
 // ---- OTS anchoring (Python helper required for submit; verify is pure JS) ----
 export { submitOts } from './anchors/ots-submit.js'
 export { verifyOtsAgainstFileDigest, parseOts } from './anchors/ots-verify.js'
+
+// ---- Optional Ethereum-mainnet anchor (secondary, additive witness; never a
+//      priority source). EIP-712 typed-data builder + topics-only log verifier. ----
+export {
+  ETHEREUM_ANCHOR_EVIDENCE_PROFILE,
+  CANONICAL_CHAIN_ID,
+  REGISTER_TYPE_STRING,
+  REGISTERED_EVENT_ABI,
+  TITLE_MAX_BYTES,
+  NAME_MAX_BYTES,
+} from './anchors/eth/constants.js'
+export {
+  buildRegisterTypedData,
+  registerDomainSeparator,
+  registerStructHash,
+  registerDigest,
+  type RegisterDomain,
+  type RegisterMessage,
+  type RegisterTypedData,
+} from './anchors/eth/eip712.js'
+export {
+  verifyEthAnchor,
+  type EthAnchorResult,
+  type EthLogProvider,
+  type EthLog,
+  type VerifyEthAnchorOptions,
+} from './anchors/eth/verify-eth-anchor.js'

@@ -226,7 +226,48 @@ export interface OpenTimestampsProof {
   upgradedAt?: string
 }
 
-export type EvidenceProof = OpenTimestampsProof | (Record<string, unknown> & { type: string; claimHash: string })
+/**
+ * Reserved batch-receipt fields for an Ethereum anchor. A batched anchor is a
+ * cheaper hash-only receipt mode whose on-chain `Registered` event omits
+ * `title`/`name` and is not discoverable via `eth_getLogs(claimHash)`. The
+ * batch wire format (event/method/inclusion-path) is RESERVED in v1; a verifier
+ * makes no Merkle-path claim for a batched anchor. See spec/v1/09-onchain-anchor.md §9.3.
+ */
+export interface EthereumAnchorBatch {
+  batchId: string
+  merkleRoot: string
+  path: string[]
+}
+
+/**
+ * Optional Ethereum-mainnet anchor: a secondary, additive witness to the same
+ * 32-byte `claimHash`. NOT hashed into the commitment and NEVER a priority/time
+ * source — Bitcoin (via OpenTimestamps) remains the sole time + priority anchor.
+ *
+ * All six on-chain coordinate fields are REQUIRED; they pin the exact
+ * `Registered` log (`txHash` + `logIndex`) an off-chain verifier reads. A script
+ * `contentHash` MUST NEVER appear on this proof (membership-oracle boundary) —
+ * the runtime validator rejects it at any nesting depth. See spec/v1/09.
+ */
+export interface EthereumAnchorProof {
+  type: 'ethereum-anchor'
+  profile?: 'urn:screenplay-registration-evidence-ethereum-anchor:v1'
+  /** MUST equal the verifier's recomputed envelope claimHash (rule 3 binds it). */
+  claimHash: string
+  chainId: number
+  contract: string
+  /** Recovered USER address (the `registerWithSig` signer), not the relayer. */
+  registrant: string
+  txHash: string
+  logIndex: number
+  blockNumber: number
+  batch?: EthereumAnchorBatch
+}
+
+export type EvidenceProof =
+  | OpenTimestampsProof
+  | EthereumAnchorProof
+  | (Record<string, unknown> & { type: string; claimHash: string })
 
 export interface EvidenceBundle {
   /** Sender's assertion of the claim hash. MUST be verified against independent recomputation. */

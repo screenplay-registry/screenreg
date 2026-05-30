@@ -1,0 +1,29 @@
+{
+  "envelopeVersion": "urn:screenplay-registration-envelope:v1",
+  "committedClaim": {
+    "claimVersion": "urn:screenplay-registration-claim:v1",
+    "schemaId": "urn:screenplay-registration-claim-schema:v1",
+    "hashAlgorithm": "sha-256",
+    "manifestCanonicalization": "rfc8785",
+    "normalizationProfile": "screenplay-registration-norm/v1-strict",
+    "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "claimExtensions": {}
+  },
+  "evidenceBundle": {
+    "committedClaimHash": "sha256:78dd12edb76e01594dbbd1e45ce9b97f028db4118ebc9fbd99f535877afa13fd",
+    "proofs": [
+      {
+        "type": "ethereum-anchor",
+        "profile": "urn:screenplay-registration-evidence-ethereum-anchor:v1",
+        "claimHash": "sha256:78dd12edb76e01594dbbd1e45ce9b97f028db4118ebc9fbd99f535877afa13fd",
+        "chainId": 1,
+        "contract": "0x1111111111111111111111111111111111111111",
+        "registrant": "0x2222222222222222222222222222222222222222",
+        "txHash": "0x3333333333333333333333333333333333333333333333333333333333333333",
+        "logIndex": 2,
+        "blockNumber": 21345678
+      }
+    ],
+    "bundleExtensions": {}
+  }
+}

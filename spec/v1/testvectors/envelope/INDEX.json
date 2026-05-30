@@ -161,6 +161,11 @@
       "id": "108",
       "name": "envelope-with-multiple-proofs",
       "description": "A full envelope with multiple proofs (forward-compat test: same claim, multiple anchors)."
+    },
+    {
+      "id": "111",
+      "name": "envelope-with-ethereum-anchor",
+      "description": "A full envelope with an optional ethereum-anchor evidence proof (Section 09). The proof is additive metadata in the evidence bundle — it is NOT hashed and does not change the committed claim hash; Bitcoin remains the sole time/priority anchor."
     }
   ]
 }

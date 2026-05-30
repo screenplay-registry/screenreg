@@ -456,6 +456,69 @@ describe('cross-impl: checkEnvelopeConsistency parity', () => {
   })
 })
 
+describe('cross-impl: validateEnvelope ethereum-anchor integration boundary', () => {
+  const CONTENT_HASH = 'sha256:' + 'a'.repeat(64)
+  const CONTRACT = '0x' + '1'.repeat(40)
+  const REGISTRANT = '0x' + '2'.repeat(40)
+  const TX_HASH = '0x' + '3'.repeat(64)
+
+  function ethProof(claimHash: string, extra: Record<string, unknown> = {}) {
+    return {
+      type: 'ethereum-anchor',
+      profile: 'urn:screenplay-registration-evidence-ethereum-anchor:v1',
+      claimHash,
+      chainId: 1,
+      contract: CONTRACT,
+      registrant: REGISTRANT,
+      txHash: TX_HASH,
+      logIndex: 2,
+      blockNumber: 21345678,
+      ...extra,
+    }
+  }
+
+  it('a well-formed ethereum-anchor proof passes in both impls', () => {
+    const claim = legacyBuildCommittedClaim({ contentHash: CONTENT_HASH })
+    const claimHash = legacyComputeClaimHash(claim)
+    const env = legacyBuildEnvelope(claim, { proofs: [ethProof(claimHash) as never] })
+    const lOut = legacyValidateEnvelope(env)
+    const sOut = sharedValidateEnvelope(env)
+    expect(sOut).toEqual(lOut)
+    expect(lOut.ok).toBe(true)
+  })
+
+  it('a top-level contentHash is rejected identically in both impls', () => {
+    const claim = legacyBuildCommittedClaim({ contentHash: CONTENT_HASH })
+    const claimHash = legacyComputeClaimHash(claim)
+    const env = legacyBuildEnvelope(claim, {
+      proofs: [ethProof(claimHash, { contentHash: CONTENT_HASH }) as never],
+    })
+    const lOut = legacyValidateEnvelope(env)
+    const sOut = sharedValidateEnvelope(env)
+    expect(sOut).toEqual(lOut)
+    expect(lOut.ok).toBe(false)
+    if (!lOut.ok) {
+      expect(lOut.errors.some((e) => e.includes('contentHash is not permitted'))).toBe(true)
+    }
+  })
+
+  it('a contentHash nested under batch is rejected identically in both impls', () => {
+    const claim = legacyBuildCommittedClaim({ contentHash: CONTENT_HASH })
+    const claimHash = legacyComputeClaimHash(claim)
+    const env = legacyBuildEnvelope(claim, {
+      proofs: [
+        ethProof(claimHash, {
+          batch: { batchId: 'b1', merkleRoot: '0x' + '4'.repeat(64), contentHash: CONTENT_HASH },
+        }) as never,
+      ],
+    })
+    const lOut = legacyValidateEnvelope(env)
+    const sOut = sharedValidateEnvelope(env)
+    expect(sOut).toEqual(lOut)
+    expect(lOut.ok).toBe(false)
+  })
+})
+
 // Suppress unused-warning by referencing the imports in a no-op smoke check
 describe('cross-impl: shared exports are wired', () => {
   it('shared buildEvidenceBundle returns an object', () => {

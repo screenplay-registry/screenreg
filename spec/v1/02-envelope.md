@@ -105,6 +105,17 @@ The contents of `evidenceBundle` are UNTRUSTED. Verifiers MUST:
    the `.ots` binary), NOT from convenience metadata fields like `submittedAt` or `upgradedAt`.
 5. Treat `bundleExtensions` as untrusted metadata. NEVER base verification decisions on it.
 
+Verifiers MUST NOT reject an envelope solely because a proof carries an unknown `type` or
+extra fields. An unknown-but-`claimHash`-matching proof is tolerated and reported as
+UNVERIFIED, never as invalid. Only the `committedClaimHash`-match (rule 2) and the per-proof
+`claimHash`-match (rule 3) are mandatory; everything else about a proof is type-specific.
+
+This tolerance is what makes the evidence bundle forward-compatible: a verifier that predates
+a new anchor type still verifies the Bitcoin time anchor and simply leaves the unknown proof
+UNVERIFIED. A verifier that DOES understand a given proof `type` MAY additionally validate that
+type's specific shape and reject a malformed proof of a KNOWN type — strict validation of a
+known type does not weaken the tolerance rule for unknown types.
+
 ### 5. Canonicalization (RFC 8785)
 
 The commitment hash is computed as:

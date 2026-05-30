@@ -345,6 +345,31 @@ const envelopeVectors: EnvelopeVector[] = [
       })
     },
   },
+  {
+    id: '111',
+    name: 'envelope-with-ethereum-anchor',
+    description:
+      'A full envelope with an optional ethereum-anchor evidence proof (Section 09). The proof is additive metadata in the evidence bundle — it is NOT hashed and does not change the committed claim hash; Bitcoin remains the sole time/priority anchor.',
+    build: () => {
+      const claim = buildCommittedClaim({ contentHash: HASH_PLACEHOLDER_A })
+      const claimHash = computeClaimHash(claim)
+      return buildEnvelope(claim, {
+        proofs: [
+          {
+            type: 'ethereum-anchor',
+            profile: 'urn:screenplay-registration-evidence-ethereum-anchor:v1',
+            claimHash,
+            chainId: 1,
+            contract: '0x' + '1'.repeat(40),
+            registrant: '0x' + '2'.repeat(40),
+            txHash: '0x' + '3'.repeat(64),
+            logIndex: 2,
+            blockNumber: 21345678,
+          } as any,
+        ],
+      })
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------

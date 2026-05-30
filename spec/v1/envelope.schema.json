@@ -197,7 +197,18 @@
         "committedClaimHash": { "$ref": "#/$defs/Sha256Hash" },
         "proofs": {
           "type": "array",
-          "items": { "$ref": "#/$defs/EvidenceProof" }
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/EvidenceProof" },
+              {
+                "if": {
+                  "properties": { "type": { "const": "ethereum-anchor" } },
+                  "required": ["type"]
+                },
+                "then": { "$ref": "#/$defs/EthereumAnchorProof" }
+              }
+            ]
+          }
         },
         "bundleExtensions": {
           "type": "object",
@@ -213,6 +224,33 @@
         "type": { "type": "string", "minLength": 1 },
         "claimHash": { "$ref": "#/$defs/Sha256Hash" }
       }
+    },
+    "EthereumAnchorProof": {
+      "type": "object",
+      "required": [
+        "type",
+        "claimHash",
+        "chainId",
+        "contract",
+        "registrant",
+        "txHash",
+        "logIndex",
+        "blockNumber"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "ethereum-anchor" },
+        "claimHash": { "$ref": "#/$defs/Sha256Hash" },
+        "profile": { "const": "urn:screenplay-registration-evidence-ethereum-anchor:v1" },
+        "chainId": { "type": "integer", "minimum": 1 },
+        "contract": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+        "registrant": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+        "txHash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+        "logIndex": { "type": "integer", "minimum": 0 },
+        "blockNumber": { "type": "integer", "minimum": 0 },
+        "batch": { "type": "object" }
+      },
+      "description": "Strict positive shape for an Ethereum-anchor evidence proof. The open EvidenceProof catch-all still applies to all types incl. unknown; this $def is dispatched only when type === 'ethereum-anchor'. additionalProperties is true here deliberately — the schema asserts the positive shape; the runtime validator enforces the deep contentHash rejection (membership-oracle boundary). See spec/v1/09-onchain-anchor.md."
     }
   }
 }

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:screenplay-registration-registry-record:v1",
+  "title": "The Screenplay Registry v1 Registry-Index Record",
+  "description": "JSON Schema for a single off-chain registry-index record. See /spec/v1/10-registry-index.md for the authoritative specification. This is an OFF-CHAIN discovery artifact, NOT a committedClaim field and NOT part of any v1 commitment surface. The script `contentHash` is deliberately absent and is forbidden at any depth (membership-oracle boundary).",
+  "type": "object",
+  "required": ["registryRecordVersion", "claimHash", "anchors"],
+  "additionalProperties": false,
+  "properties": {
+    "registryRecordVersion": {
+      "const": "urn:screenplay-registration-registry-record:v1"
+    },
+    "claimHash": {
+      "$ref": "#/$defs/Sha256Hash",
+      "description": "Primary key and join key. The same opaque commitment carried by the envelope. Recomputable by a script-holder; never the script fingerprint."
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "OPTIONAL public, searchable listing label chosen by the registrant. Self-published; not auto-extracted PII."
+    },
+    "author": { "$ref": "#/$defs/Author" },
+    "registeredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "INFORMATIONAL only. Never used for priority or tie resolution — the truth is the .ots height against Bitcoin. An operator-supplied wall-clock label."
+    },
+    "anchors": { "$ref": "#/$defs/Anchors" }
+  },
+  "$defs": {
+    "Sha256Hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Author": {
+      "type": "object",
+      "required": ["pubkey"],
+      "additionalProperties": false,
+      "properties": {
+        "pubkey": {
+          "type": "string",
+          "pattern": "^ed25519:[A-Za-z0-9+/=]+$",
+          "description": "The registrant's Ed25519 public key (Section 02 registrant block)."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "OPTIONAL chosen label (pen name / handle / real name — the registrant's choice). Blank by default."
+        }
+      }
+    },
+    "Anchors": {
+      "type": "object",
+      "required": ["opentimestamps"],
+      "additionalProperties": false,
+      "properties": {
+        "opentimestamps": { "$ref": "#/$defs/OpenTimestampsAnchor" },
+        "ethereum": { "$ref": "#/$defs/EthereumAnchor" }
+      }
+    },
+    "OpenTimestampsAnchor": {
+      "type": "object",
+      "required": ["proofRef"],
+      "additionalProperties": false,
+      "properties": {
+        "proofRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A snapshot-relative reference (filename) to the record's .ots proof. Resolved ONLY relative to the snapshot directory by the loader; absolute paths, parent-directory traversal, and symlinks are rejected at load time."
+        },
+        "bitcoinBlock": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "INFORMATIONAL hint only. An OTS-CLAIMED height parsed from the .ots is NOT Bitcoin-final until an attestation verifier confirms header inclusion. Priority is resolved from the verified height, never from this hint."
+        }
+      }
+    },
+    "EthereumAnchor": {
+      "type": "object",
+      "required": ["chainId", "contract", "txHash", "logIndex", "blockNumber"],
+      "additionalProperties": false,
+      "properties": {
+        "chainId": { "type": "integer", "minimum": 1 },
+        "contract": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+        "txHash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+        "logIndex": { "type": "integer", "minimum": 0 },
+        "blockNumber": { "type": "integer", "minimum": 0 }
+      },
+      "description": "OPTIONAL secondary Ethereum-anchor coordinates (Section 09). Informational; NEVER a priority source."
+    }
+  }
+}
