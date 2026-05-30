@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readSync, openSync, writeSync, closeSync, fchmodSync, lstatSync, unlinkSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { normalize, contentHash, contentHashOfNormalized } from '../normalize/v1-strict.js'
@@ -52,7 +52,25 @@ import {
   decryptFieldsBlock,
   type EncryptedFieldsBlock,
 } from '../encrypt/fields.js'
-import type { Envelope } from '../envelope/types.js'
+import type { Envelope, EthereumAnchorProof, EvidenceProof } from '../envelope/types.js'
+import { CANONICAL_CHAIN_ID, ETHEREUM_ANCHOR_EVIDENCE_PROFILE } from '../anchors/eth/constants.js'
+import {
+  verifyEthAnchor,
+  type EthAnchorResult,
+  type EthLog,
+  type EthLogProvider,
+} from '../anchors/eth/verify-eth-anchor.js'
+import {
+  buildRegistryRecord,
+  validateRegistryRecord,
+  type RegistryRecord,
+} from '../registry/record.js'
+import {
+  verifyIndexSnapshot,
+  type LoadOtsProof,
+  type RegistrySnapshot,
+} from '../registry/verify-index.js'
+import { resolvePriority, type PriorityContender } from '../registry/priority.js'
 
 const CLI_NAME = 'screenreg' // The Screenplay Registry
 
@@ -172,6 +190,58 @@ function readJsonFileBounded<T>(path: string, label: string): T {
 
 function readEnvelope(path: string): Envelope {
   return readJsonFileBounded<Envelope>(path, 'envelope')
+}
+
+/**
+ * Resolve a proof reference that MUST live beside a base file, with hard
+ * path-traversal containment. A registry snapshot names its `.ots` proofs by
+ * a snapshot-relative `proofRef`; a hostile snapshot could try to point that
+ * reference at an arbitrary file (`/etc/shadow`, `../../secret.key`) or hide a
+ * traversal behind a symlink. The contract here is deliberately narrow:
+ *
+ *   1. `proofRef` MUST be a bare relative path — absolute paths are rejected.
+ *   2. After resolution it MUST stay strictly inside `baseDir` — any `..` that
+ *      escapes (even via an internal segment) is rejected.
+ *   3. Neither the resolved target nor any path segment may be a symlink —
+ *      checked with `lstatSync`, never `statSync`, so a symlink pointing
+ *      outside `baseDir` cannot smuggle the read past the containment check.
+ *
+ * Returns the absolute, contained path. Throws (never returns a path) on any
+ * violation so the caller fails closed.
+ */
+function resolveSiblingProof(baseDir: string, proofRef: string): string {
+  if (typeof proofRef !== 'string' || proofRef.length === 0) {
+    throw new Error('proofRef must be a non-empty string')
+  }
+  // Reject absolute references outright (POSIX `/...` and Windows `C:\...`/UNC).
+  if (proofRef.startsWith('/') || proofRef.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(proofRef)) {
+    throw new Error(`proofRef must be relative, got absolute path: ${proofRef}`)
+  }
+  const base = resolve(baseDir)
+  const target = resolve(base, proofRef)
+  // Containment: the resolved target must be `base` itself or a descendant.
+  // The trailing separator on the prefix stops `/base-evil` matching `/base`.
+  if (target !== base && !target.startsWith(base + sep)) {
+    throw new Error(`proofRef escapes the snapshot directory: ${proofRef}`)
+  }
+  // Walk every path segment from base down to the target and reject any symlink.
+  // Resolving first then re-checking with lstat closes the gap where a symlink
+  // segment would otherwise let `target` land outside `base`.
+  let cursor = base
+  const rel = target.slice(base.length).split(sep).filter((s) => s.length > 0)
+  for (const segment of rel) {
+    cursor = join(cursor, segment)
+    let st
+    try {
+      st = lstatSync(cursor)
+    } catch {
+      throw new Error(`proofRef does not resolve to an existing file: ${proofRef}`)
+    }
+    if (st.isSymbolicLink()) {
+      throw new Error(`proofRef path contains a symlink (rejected): ${proofRef}`)
+    }
+  }
+  return target
 }
 
 /**
@@ -496,9 +566,18 @@ interface VerifyOptions {
    * MUST gate on independent Bitcoin verifiability.
    */
   requireBitcoinAnchor?: boolean
+  /**
+   * Optional Ethereum JSON-RPC endpoint. When set AND the envelope carries an
+   * `ethereum-anchor` proof, verify runs a topics-only on-chain check and prints
+   * the result as INFORMATIONAL. The Ethereum anchor is a secondary witness: its
+   * result NEVER changes the Bitcoin OK/FAILED verdict or the exit status.
+   */
+  ethRpc?: string
+  /** Confirmations required for the Ethereum anchor to count as final. */
+  ethMinConfirmations?: number
 }
 
-function cmdVerify(opts: VerifyOptions): void {
+async function cmdVerify(opts: VerifyOptions): Promise<void> {
   const raw = readScreenplayBounded(opts.inputFile)
   const envelope = readEnvelope(opts.envelopePath)
   const otsBytes = readFileSync(opts.otsPath)
@@ -598,6 +677,14 @@ function cmdVerify(opts: VerifyOptions): void {
     process.exit(2)
   }
 
+  // 5. Optional Ethereum-anchor check (INFORMATIONAL). The envelope is otherwise
+  // Bitcoin-valid here; the ETH anchor is a secondary witness and its result
+  // never changes the verdict below or the exit status. We compute it once and
+  // print it on every success/pending/no-attestation path. The verifier is
+  // passed the INDEPENDENTLY-RECOMPUTED claimHash (never proof.claimHash) for
+  // both the topic filter and the comparison.
+  const printEth = await prepareEthAnchorReport(envelope, recomputedClaimHash, opts)
+
   // Status headline distinguishes Bitcoin-attestation-present vs pending vs
   // no-attestations. A casual reader who stops at the first line MUST get the
   // right impression of verification strength.
@@ -621,6 +708,7 @@ function cmdVerify(opts: VerifyOptions): void {
         `        verification, run upstream \`ots verify ${opts.otsPath}\` against the\n` +
         `        opentimestamps-client. Full in-process SPV ships in v0.2.\n`,
     )
+    printEth()
     process.exit(0)
   }
   if (otsResult.pendingCalendarUrls.length > 0) {
@@ -638,6 +726,7 @@ function cmdVerify(opts: VerifyOptions): void {
       `  Until upgraded, this proof depends on the calendar operator(s) above. It is NOT\n` +
         `  yet independently verifiable against Bitcoin block headers alone.\n`,
     )
+    printEth()
     if (opts.requireBitcoinAnchor) {
       process.stdout.write(`\n✗ FAILED — --require-bitcoin-anchor was set but the proof is still pending.\n`)
       process.exit(2)
@@ -651,11 +740,51 @@ function cmdVerify(opts: VerifyOptions): void {
   )
   process.stdout.write(`  Content hash:  ${recomputedContentHash}\n`)
   process.stdout.write(`  Claim hash:    ${recomputedClaimHash}\n`)
+  printEth()
   if (opts.requireBitcoinAnchor) {
     process.stdout.write(`\n✗ FAILED — --require-bitcoin-anchor was set but the proof has no attestations.\n`)
     process.exit(2)
   }
   process.exit(0)
+}
+
+/**
+ * Prepare the optional Ethereum-anchor report for `verify`. Runs the topics-only
+ * on-chain check (when `--eth-rpc` is set and the envelope carries an
+ * `ethereum-anchor` proof) and returns a closure that PRINTS the result. The
+ * check is INFORMATIONAL: any RPC failure degrades to `unverified` inside the
+ * verifier, the result is never allowed to change the Bitcoin verdict, and the
+ * recomputed envelope claimHash (not `proof.claimHash`) is the expected value.
+ * Returns a no-op closure when there is nothing to report.
+ */
+async function prepareEthAnchorReport(
+  envelope: Envelope,
+  recomputedClaimHash: string,
+  opts: VerifyOptions,
+): Promise<() => void> {
+  if (opts.ethRpc === undefined) return () => {}
+  const ethProof = envelope.evidenceBundle.proofs.find(
+    (p): p is EthereumAnchorProof => p.type === 'ethereum-anchor',
+  )
+  if (ethProof === undefined) {
+    return () => {
+      process.stdout.write(
+        `  Ethereum anchor: none in envelope (--eth-rpc supplied but no ethereum-anchor proof).\n`,
+      )
+    }
+  }
+  const provider = makeJsonRpcProvider(opts.ethRpc)
+  const minConfirmations = opts.ethMinConfirmations ?? 12
+  let result: EthAnchorResult
+  try {
+    result = await verifyEthAnchor(ethProof, recomputedClaimHash, provider, { minConfirmations })
+  } catch {
+    // Defense-in-depth: the verifier already catches provider errors, but a
+    // construction/abort error must still never fail an otherwise Bitcoin-valid
+    // proof. Degrade to an informational unverified line.
+    result = { status: 'unverified', reason: 'rpc-error' }
+  }
+  return () => printEthAnchorResult(result, ethProof.registrant, ethProof.blockNumber)
 }
 
 interface DiagnoseOptions {
@@ -1186,6 +1315,509 @@ async function cmdDecryptField(envelopePath: string, fieldName: string): Promise
 }
 
 // ---------------------------------------------------------------------------
+// Optional Ethereum-mainnet anchor (secondary, additive witness — NEVER a
+// priority/time source; Bitcoin via OpenTimestamps stays the sole anchor).
+// ---------------------------------------------------------------------------
+
+interface AttachEthAnchorOptions {
+  envelopePath: string
+  contract: string
+  registrant: string
+  txHash: string
+  logIndex: number
+  blockNumber: number
+  chainId: number
+  outPath: string | undefined
+}
+
+/**
+ * Attach an `ethereum-anchor` evidence proof to an existing envelope and write a
+ * NEW envelope (never mutating in place — the original + its `.ots` stay valid).
+ *
+ * The proof is bound to the envelope's INDEPENDENTLY-RECOMPUTED `claimHash`, not
+ * to any value the caller supplies, so an attached anchor can only ever witness
+ * the same 32-byte commitment. The combined envelope is then re-validated against
+ * the v1 schema: the strict `ethereum-anchor` validator runs at this integration
+ * boundary, so a malformed coordinate (or a forbidden `contentHash`) fails here
+ * rather than silently shipping. The anchor is additive — it changes no committed
+ * bytes and is never hashed into the claim.
+ */
+function cmdAttachEthAnchor(opts: AttachEthAnchorOptions): void {
+  const envelope = readEnvelope(opts.envelopePath)
+
+  // Bind to the recomputed envelope claimHash — never trust a caller-supplied one.
+  const claimHash = computeClaimHash(envelope.committedClaim)
+  const consistency = checkEnvelopeConsistency(envelope, claimHash)
+  if (!consistency.ok) {
+    die(`attach-eth-anchor: source envelope is inconsistent — ${consistency.detail}`)
+  }
+
+  const proof: EthereumAnchorProof = {
+    type: 'ethereum-anchor',
+    profile: ETHEREUM_ANCHOR_EVIDENCE_PROFILE,
+    claimHash,
+    chainId: opts.chainId,
+    contract: opts.contract,
+    registrant: opts.registrant,
+    txHash: opts.txHash,
+    logIndex: opts.logIndex,
+    blockNumber: opts.blockNumber,
+  }
+
+  const updated: Envelope = {
+    ...envelope,
+    evidenceBundle: {
+      ...envelope.evidenceBundle,
+      proofs: [...envelope.evidenceBundle.proofs, proof],
+    },
+  }
+
+  // Re-validate the combined envelope. The strict ethereum-anchor branch runs at
+  // this boundary; a bad address/hash/logIndex (or a contentHash anywhere on the
+  // proof) is rejected here before anything is written.
+  const shape = validateEnvelope(updated)
+  if (!shape.ok) {
+    process.stderr.write(`${CLI_NAME}: attach-eth-anchor: resulting envelope is invalid\n`)
+    for (const e of shape.errors) process.stderr.write(`  • ${e}\n`)
+    process.exit(2)
+  }
+
+  const outPath = opts.outPath ?? defaultAnchoredEnvelopePath(opts.envelopePath)
+  if (resolve(outPath) === resolve(opts.envelopePath)) {
+    die('attach-eth-anchor: --out must differ from the source envelope (never overwrites in place)')
+  }
+  writeFileSync(outPath, JSON.stringify(updated, null, 2) + '\n')
+
+  process.stderr.write(`\n✓ Ethereum anchor attached (additive — claim hash unchanged).\n`)
+  process.stderr.write(`  Claim hash:  ${claimHash}\n`)
+  process.stderr.write(`  Contract:    ${opts.contract}\n`)
+  process.stderr.write(`  Registrant:  ${opts.registrant}\n`)
+  process.stderr.write(`  Tx / log:    ${opts.txHash} #${opts.logIndex} (block ${opts.blockNumber})\n`)
+  process.stderr.write(`  New envelope: ${outPath}\n`)
+  process.stderr.write(
+    `  NOTE: the Ethereum anchor is a SECONDARY witness. It is never a priority or\n` +
+      `        time source — Bitcoin (via OpenTimestamps) remains the sole anchor.\n` +
+      `        Verify it on-chain with: ${CLI_NAME} verify <file> <env> <ots> --eth-rpc <url>\n`,
+  )
+}
+
+function defaultAnchoredEnvelopePath(envelopePath: string): string {
+  const dir = dirname(envelopePath)
+  const base = basename(envelopePath)
+  const stem = base.endsWith('.json') ? base.slice(0, -'.json'.length) : base
+  return join(dir, `${stem}.eth-anchored.json`)
+}
+
+/**
+ * A minimal JSON-RPC `EthLogProvider` over a single endpoint URL, used only by
+ * the CLI's optional `--eth-rpc` path. It speaks the three read methods the
+ * topics-only verifier needs (`eth_chainId`, `eth_getLogs`, `eth_blockNumber`)
+ * and DELIBERATELY exposes no calldata/receipt method — the verifier reads event
+ * topics and never recovers a signature off-chain.
+ *
+ * Any network/JSON error surfaces as a thrown error; the verifier catches it and
+ * degrades to `unverified`, so a flaky RPC never flips a Bitcoin verdict.
+ */
+function makeJsonRpcProvider(rpcUrl: string): EthLogProvider {
+  let nextId = 1
+  async function rpc<T>(method: string, params: unknown[]): Promise<T> {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: nextId++, method, params }),
+    })
+    if (!res.ok) throw new Error(`RPC ${method} HTTP ${res.status}`)
+    const json = (await res.json()) as { result?: unknown; error?: { message?: string } }
+    if (json.error) throw new Error(`RPC ${method}: ${json.error.message ?? 'error'}`)
+    return json.result as T
+  }
+  return {
+    async getChainId(): Promise<number> {
+      return Number.parseInt(await rpc<string>('eth_chainId', []), 16)
+    },
+    async getBlockNumber(): Promise<number> {
+      return Number.parseInt(await rpc<string>('eth_blockNumber', []), 16)
+    },
+    async getLogs(filter): Promise<EthLog[]> {
+      const toHexBlock = (n: number | undefined): string | undefined =>
+        n === undefined ? undefined : '0x' + n.toString(16)
+      const rawLogs = await rpc<
+        {
+          address: string
+          topics: string[]
+          blockNumber: string
+          transactionHash: string
+          logIndex: string
+        }[]
+      >('eth_getLogs', [
+        {
+          address: filter.address,
+          topics: filter.topics,
+          ...(filter.fromBlock !== undefined ? { fromBlock: toHexBlock(filter.fromBlock) } : {}),
+          ...(filter.toBlock !== undefined ? { toBlock: toHexBlock(filter.toBlock) } : {}),
+        },
+      ])
+      return rawLogs.map((l) => ({
+        address: l.address,
+        topics: l.topics,
+        blockNumber: Number.parseInt(l.blockNumber, 16),
+        transactionHash: l.transactionHash,
+        logIndex: Number.parseInt(l.logIndex, 16),
+      }))
+    },
+  }
+}
+
+/**
+ * Print the result of an on-chain `ethereum-anchor` check as INFORMATIONAL.
+ * NEVER changes a Bitcoin verdict or this process's exit status — the ETH anchor
+ * is a secondary witness. The deterministic status taxonomy is surfaced verbatim
+ * so a script can grep it without inferring success from the Bitcoin result.
+ */
+function printEthAnchorResult(result: EthAnchorResult, registrant: string, blockNumber: number): void {
+  switch (result.status) {
+    case 'verified':
+      process.stdout.write(
+        `  Ethereum anchor: VERIFIED — also anchored on Ethereum mainnet at block ${result.blockNumber} ` +
+          `by ${registrant} (${result.confirmations} confirmations). Informational; not a priority source.\n`,
+      )
+      break
+    case 'not-found':
+      process.stdout.write(
+        `  Ethereum anchor: NOT-FOUND — RPC reachable but no Registered log matched the proof's ` +
+          `txHash + logIndex at block ${blockNumber}. (Bitcoin verdict unaffected.)\n`,
+      )
+      break
+    case 'unverified':
+      process.stdout.write(
+        `  Ethereum anchor: UNVERIFIED (${result.reason}) — could not confirm on-chain ` +
+          `(RPC issue, insufficient confirmations, or a reserved batched anchor). (Bitcoin verdict unaffected.)\n`,
+      )
+      break
+    case 'rejected':
+      process.stdout.write(
+        `  Ethereum anchor: REJECTED (${result.reason}) — on-chain data contradicts the proof. ` +
+          `This does NOT change the Bitcoin verdict; the ETH anchor is a secondary witness only.\n`,
+      )
+      break
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Registry index: build / search / verify + Bitcoin-only priority lookup.
+//
+// The registry index is a SIGNED, MIRRORABLE discovery convenience — NOT a
+// tamper-proof log. In v1 it gives ZERO cryptographic protection against an
+// operator that censors, withholds, or equivocates; per-record truth is each
+// record's own `.ots` verified against Bitcoin. Priority/dispute resolution uses
+// the Bitcoin block height ONLY, and only when an injected attestation verifier
+// has confirmed header inclusion. See spec/v1/10-registry-index.md.
+// ---------------------------------------------------------------------------
+
+interface RegistryBuildOptions {
+  envelopePath: string
+  proofRef: string | undefined
+  title: string | undefined
+  authorPubkey: string | undefined
+  authorName: string | undefined
+  registeredAt: string | undefined
+  outPath: string | undefined
+}
+
+/**
+ * Build a registry-index record from an envelope. The record carries the opaque
+ * `claimHash` (recomputed from the envelope, never trusted from a field), optional
+ * public labels, and the anchor coordinates needed to re-verify the record
+ * independently. The script `contentHash` is FORBIDDEN at any depth — the
+ * validator rejects it so the index can never become a membership oracle.
+ */
+function cmdRegistryBuild(opts: RegistryBuildOptions): void {
+  const envelope = readEnvelope(opts.envelopePath)
+  const claimHash = computeClaimHash(envelope.committedClaim)
+  const consistency = checkEnvelopeConsistency(envelope, claimHash)
+  if (!consistency.ok) {
+    die(`registry-build: source envelope is inconsistent — ${consistency.detail}`)
+  }
+
+  // Pull the OTS proofRef from the envelope's opentimestamps proof unless the
+  // caller overrides it. The record's truth is this `.ots` against Bitcoin.
+  const otsProof = envelope.evidenceBundle.proofs.find(
+    (p): p is EvidenceProof & { proofRef: string } =>
+      p.type === 'opentimestamps' && typeof (p as { proofRef?: unknown }).proofRef === 'string',
+  )
+  const proofRef = opts.proofRef ?? otsProof?.proofRef
+  if (proofRef === undefined) {
+    die(
+      'registry-build: no OpenTimestamps proofRef found in the envelope; supply one with --proof-ref <file>',
+    )
+  }
+
+  // Optionally surface an Ethereum anchor's coordinates (secondary witness only).
+  const ethProof = envelope.evidenceBundle.proofs.find(
+    (p): p is EthereumAnchorProof => p.type === 'ethereum-anchor',
+  )
+
+  const record = buildRegistryRecord({
+    claimHash,
+    ...(opts.title !== undefined ? { title: opts.title } : {}),
+    ...(opts.authorPubkey !== undefined
+      ? {
+          author: {
+            pubkey: opts.authorPubkey,
+            ...(opts.authorName !== undefined ? { name: opts.authorName } : {}),
+          },
+        }
+      : {}),
+    ...(opts.registeredAt !== undefined ? { registeredAt: opts.registeredAt } : {}),
+    anchors: {
+      opentimestamps: { proofRef },
+      ...(ethProof !== undefined
+        ? {
+            ethereum: {
+              chainId: ethProof.chainId,
+              contract: ethProof.contract,
+              txHash: ethProof.txHash,
+              logIndex: ethProof.logIndex,
+              blockNumber: ethProof.blockNumber,
+            },
+          }
+        : {}),
+    },
+  })
+
+  const validation = validateRegistryRecord(record)
+  if (!validation.ok) {
+    process.stderr.write(`${CLI_NAME}: registry-build: built an invalid record\n`)
+    for (const e of validation.errors) process.stderr.write(`  • ${e}\n`)
+    process.exit(2)
+  }
+
+  const json = JSON.stringify(record, null, 2) + '\n'
+  if (opts.outPath !== undefined) {
+    writeFileSync(opts.outPath, json)
+    process.stderr.write(`✓ Registry record written to ${opts.outPath}\n`)
+    process.stderr.write(`  Claim hash:  ${claimHash}\n`)
+    process.stderr.write(`  OTS proof:   ${proofRef}\n`)
+  } else {
+    process.stdout.write(json)
+  }
+}
+
+/** Read a registry snapshot (`{ records: [...] }`) and validate every record. */
+function readRegistrySnapshot(snapshotPath: string): { snapshot: RegistrySnapshot; dir: string } {
+  const raw = readJsonFileBounded<unknown>(snapshotPath, 'snapshot')
+  if (typeof raw !== 'object' || raw === null || !Array.isArray((raw as { records?: unknown }).records)) {
+    die('snapshot must be a JSON object with a "records" array')
+  }
+  const records = (raw as { records: unknown[] }).records
+  const validated: RegistryRecord[] = []
+  records.forEach((rec, i) => {
+    const v = validateRegistryRecord(rec)
+    if (!v.ok) {
+      process.stderr.write(`${CLI_NAME}: snapshot record[${i}] is invalid:\n`)
+      for (const e of v.errors) process.stderr.write(`  • ${e}\n`)
+      process.exit(2)
+    }
+    validated.push(rec as RegistryRecord)
+  })
+  return { snapshot: { records: validated }, dir: dirname(resolve(snapshotPath)) }
+}
+
+interface RegistrySearchOptions {
+  snapshotPath: string
+  claimHash: string | undefined
+  title: string | undefined
+  author: string | undefined
+}
+
+/**
+ * Search a registry snapshot by claimHash, public title, or public author
+ * (pubkey or name), printing matching records. Search is over PUBLIC labels only
+ * — the script `contentHash` is never in a record, so the index is not a
+ * membership oracle for the work itself.
+ */
+function cmdRegistrySearch(opts: RegistrySearchOptions): void {
+  const { snapshot } = readRegistrySnapshot(opts.snapshotPath)
+  const needleHash = opts.claimHash?.toLowerCase()
+  const needleTitle = opts.title?.toLowerCase()
+  const needleAuthor = opts.author?.toLowerCase()
+
+  const matches = snapshot.records.filter((r) => {
+    if (needleHash !== undefined && r.claimHash.toLowerCase() !== needleHash) return false
+    if (needleTitle !== undefined && !(r.title ?? '').toLowerCase().includes(needleTitle)) return false
+    if (needleAuthor !== undefined) {
+      const pubkey = (r.author?.pubkey ?? '').toLowerCase()
+      const name = (r.author?.name ?? '').toLowerCase()
+      if (!pubkey.includes(needleAuthor) && !name.includes(needleAuthor)) return false
+    }
+    return true
+  })
+
+  if (matches.length === 0) {
+    process.stderr.write('No matching records.\n')
+    process.exit(1)
+  }
+  process.stdout.write(JSON.stringify({ matches }, null, 2) + '\n')
+  process.stderr.write(`${matches.length} match${matches.length === 1 ? '' : 'es'}.\n`)
+}
+
+/**
+ * Build the CLI's path-traversal-guarded `loadOtsProof` resolver. Every record's
+ * `proofRef` is resolved ONLY relative to the snapshot directory; absolute paths,
+ * `..` traversal, and symlinks are rejected (fail closed). Returns `undefined`
+ * when a proof file is absent so a missing proof is reported, not fatal.
+ */
+function makeSnapshotOtsLoader(snapshotDir: string): LoadOtsProof {
+  return (record: RegistryRecord, proofRef: string): Buffer | undefined => {
+    let resolved: string
+    try {
+      resolved = resolveSiblingProof(snapshotDir, proofRef)
+    } catch (e) {
+      // A rejected proofRef (traversal/symlink/absolute) is surfaced as an error
+      // by re-throwing — verifyIndexSnapshot turns it into an ok:false record.
+      throw new Error(
+        `record ${record.claimHash}: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+    if (!existsSync(resolved)) return undefined
+    const st = lstatSync(resolved)
+    if (st.size > MAX_JSON_INPUT_BYTES) {
+      throw new Error(`record ${record.claimHash}: .ots proof too large: ${st.size} bytes`)
+    }
+    return readFileSync(resolved)
+  }
+}
+
+interface VerifyRegistryOptions {
+  snapshotPath: string
+  minConfirmations: number
+}
+
+/**
+ * Verify every record in a registry snapshot by re-checking its `.ots` against
+ * Bitcoin (per-record only — there is NO snapshot-root step; that is deferred
+ * with the CT-style transparency-log target). Without an injected Bitcoin-
+ * attestation verifier, every height is OTS-CLAIMED (header-unverified) and
+ * CANNOT rank; this command refuses to print a priority ranking in that case.
+ */
+async function cmdVerifyRegistry(opts: VerifyRegistryOptions): Promise<void> {
+  const { snapshot, dir } = readRegistrySnapshot(opts.snapshotPath)
+  const loadOtsProof = makeSnapshotOtsLoader(dir)
+
+  // No Bitcoin-attestation oracle is wired in the CLI: this verifier confirms
+  // structural `.ots` validity (file-digest match + parsed heights) but NOT
+  // Bitcoin-header inclusion. Every height is therefore OTS-CLAIMED.
+  const result = await verifyIndexSnapshot(snapshot, {
+    loadOtsProof,
+    minConfirmations: opts.minConfirmations,
+  })
+
+  process.stdout.write(
+    `Registry snapshot verification — per-record .ots only.\n` +
+      `The index is signed/mirrorable, NOT a tamper-proof log: it offers ZERO\n` +
+      `cryptographic protection against operator censorship or equivocation. Each\n` +
+      `record's truth is its own .ots against Bitcoin.\n\n`,
+  )
+
+  let okCount = 0
+  let failCount = 0
+  for (const rec of result.records) {
+    if (rec.ok) {
+      okCount++
+      const heights = rec.bitcoinHeights
+        .map((h) => `${h.height} [${h.finality === 'bitcoin-final' ? 'Bitcoin-final' : 'OTS-CLAIMED, NOT Bitcoin-final'}]`)
+        .join(', ')
+      process.stdout.write(
+        `  ✓ ${rec.claimHash}\n` +
+          `      structural .ots OK; heights: ${heights.length > 0 ? heights : '(none — pending)'}\n`,
+      )
+    } else {
+      failCount++
+      process.stdout.write(`  ✗ ${rec.claimHash}\n      ${rec.reason}\n`)
+    }
+  }
+
+  // Priority is Bitcoin-only and requires Bitcoin-final heights. Without an
+  // attestation oracle (none in the CLI), all heights are OTS-claimed and the
+  // contest is undetermined — refuse to print a ranking rather than fake one.
+  const contenders: PriorityContender[] = result.records.map((r) => ({
+    claimHash: r.claimHash,
+    result: r,
+  }))
+  const priority = resolvePriority(contenders)
+  process.stdout.write(`\nPriority / dispute resolution (Bitcoin block height ONLY):\n`)
+  printPriorityOutcome(priority)
+
+  process.stdout.write(`\n${okCount} verified, ${failCount} failed.\n`)
+  if (failCount > 0) process.exit(2)
+  process.exit(0)
+}
+
+interface RegistryPriorityOptions {
+  snapshotPath: string
+  minConfirmations: number
+  claimHashes: string[]
+}
+
+/**
+ * Bitcoin-only priority / dispute lookup across a snapshot (optionally narrowed
+ * to a set of contender claimHashes). Ranks by EARLIEST Bitcoin block height;
+ * same block ⇒ tie; ETH anchors never rank; `registeredAt` is ignored. Because
+ * the CLI wires no Bitcoin-attestation oracle, all heights are OTS-CLAIMED and
+ * the contest resolves `undetermined` — proving earliest anchored commitment
+ * requires header-verified heights, which this surface honestly refuses to fake.
+ */
+async function cmdRegistryPriority(opts: RegistryPriorityOptions): Promise<void> {
+  const { snapshot, dir } = readRegistrySnapshot(opts.snapshotPath)
+  const loadOtsProof = makeSnapshotOtsLoader(dir)
+  const result = await verifyIndexSnapshot(snapshot, {
+    loadOtsProof,
+    minConfirmations: opts.minConfirmations,
+  })
+
+  let recs = result.records
+  if (opts.claimHashes.length > 0) {
+    const wanted = new Set(opts.claimHashes.map((h) => h.toLowerCase()))
+    recs = recs.filter((r) => wanted.has(r.claimHash.toLowerCase()))
+  }
+
+  const contenders: PriorityContender[] = recs.map((r) => ({ claimHash: r.claimHash, result: r }))
+  const priority = resolvePriority(contenders)
+  process.stdout.write(
+    `Priority / dispute resolution — Bitcoin block height ONLY (proves earliest\n` +
+      `anchored commitment, NOT authorship or originality):\n`,
+  )
+  printPriorityOutcome(priority)
+  process.exit(0)
+}
+
+function printPriorityOutcome(priority: ReturnType<typeof resolvePriority>): void {
+  switch (priority.outcome) {
+    case 'winner':
+      process.stdout.write(
+        `  WINNER — ${priority.claimHash} at Bitcoin block ${priority.bitcoinHeight}.\n`,
+      )
+      break
+    case 'tie':
+      process.stdout.write(
+        `  TIE — at Bitcoin block ${priority.bitcoinHeight} (no sub-block ordering):\n` +
+          priority.claimHashes.map((h) => `      ${h}\n`).join(''),
+      )
+      break
+    case 'undetermined':
+      process.stdout.write(`  UNDETERMINED — ${priority.reason}.\n`)
+      if (priority.reason === 'heights-not-bitcoin-final') {
+        process.stdout.write(
+          `      All candidate heights are OTS-CLAIMED, not Bitcoin-final. Ranking requires\n` +
+            `      an attestation verifier that confirms Bitcoin-header inclusion; this CLI\n` +
+            `      wires none, so it refuses to assert a priority winner.\n`,
+        )
+      }
+      break
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Argv parsing
 // ---------------------------------------------------------------------------
 
@@ -1198,10 +1830,18 @@ function printUsage(): void {
                        [--identity] [--identity-key-out PATH]
                        [--previous-claim-hash sha256:...]
   ${CLI_NAME} verify <file> <envelope> <ots> [--require-bitcoin-anchor]
+                       [--eth-rpc URL] [--eth-min-confirmations N]
                        Default: pending proofs still exit 0 with a warning headline.
                        --require-bitcoin-anchor: exit 2 unless the proof has been
                        upgraded to a Bitcoin block attestation (use in CI / scripts
                        that must gate on independent Bitcoin verifiability).
+                       --eth-rpc URL: if the envelope carries an ethereum-anchor
+                       proof, also check it on-chain (topics-only) and print the
+                       result as INFORMATIONAL. The Ethereum anchor is a secondary
+                       witness — its result NEVER changes the Bitcoin verdict or the
+                       exit status; an unreachable RPC degrades to "unverified".
+                       --eth-min-confirmations N: confirmations required for the
+                       Ethereum anchor to count as final (default 12).
   ${CLI_NAME} diagnose <file> [envelope] [ots]
   ${CLI_NAME} similarity <bundleA> <bundleB> [--envelope-a PATH] [--envelope-b PATH]
   ${CLI_NAME} disclose-comparison <input> [public-out.json] [--yes-i-understand]
@@ -1211,6 +1851,39 @@ function printUsage(): void {
   ${CLI_NAME} sign-challenge <claim-hash> <challenge-hex> <private-key.pem>
   ${CLI_NAME} verify-signature <envelope> <challenge-hex> <signature-hex>
   ${CLI_NAME} verify-registration <envelope>
+  ${CLI_NAME} attach-eth-anchor <envelope> --contract 0x… --registrant 0x…
+                       --tx-hash 0x… --log-index N --block-number N
+                       [--chain-id N] [--out PATH]
+                       Attaches an OPTIONAL Ethereum-mainnet anchor (a secondary,
+                       additive witness) to a NEW envelope; the original + its .ots
+                       stay valid. The proof is bound to the envelope's recomputed
+                       claimHash and re-validated against the v1 schema. The anchor
+                       is NEVER a priority or time source — Bitcoin stays the sole
+                       anchor. Default --chain-id is mainnet (1); --out defaults to
+                       <envelope>.eth-anchored.json (never overwrites in place).
+  ${CLI_NAME} registry-build <envelope> [--proof-ref FILE] [--title TITLE]
+                       [--author-pubkey ed25519:…] [--author-name NAME]
+                       [--registered-at ISO] [--out PATH]
+                       Builds an off-chain registry-index record (discovery
+                       convenience) from an envelope. claimHash is recomputed from
+                       the envelope; the script contentHash is FORBIDDEN. --proof-ref
+                       defaults to the envelope's opentimestamps proofRef. Writes to
+                       stdout unless --out is given.
+  ${CLI_NAME} registry-search <snapshot.json> [--claim-hash sha256:…]
+                       [--title SUBSTR] [--author SUBSTR]
+                       Searches a snapshot ({"records":[…]}) by PUBLIC labels only.
+  ${CLI_NAME} verify-registry <snapshot.json> [--min-confirmations N]
+                       Re-verifies every record's .ots against Bitcoin (per-record
+                       only — no snapshot-root step). The index is signed/mirrorable,
+                       NOT a tamper-proof log. Without an attestation verifier (the
+                       CLI wires none) heights are OTS-CLAIMED, NOT Bitcoin-final, so
+                       it REFUSES to assert a priority ranking.
+  ${CLI_NAME} registry-priority <snapshot.json> [--claim-hash sha256:…]…
+                       [--min-confirmations N]
+                       Bitcoin-only priority / dispute lookup. Ranks by earliest
+                       Bitcoin block height (same block ⇒ tie); ETH never ranks;
+                       registeredAt is ignored. Proves earliest anchored commitment,
+                       NOT authorship. Undetermined when heights are not Bitcoin-final.
   ${CLI_NAME} timelock-encrypt <envelope> <fieldName> <unlockAt-ISO> <plaintext>
                        --out PATH --i-understand-must-restamp
                        Adds a timelock field to a NEW envelope file (--out PATH; never
@@ -1437,17 +2110,158 @@ async function main(): Promise<void> {
     case 'verify': {
       const positional: string[] = []
       let requireBitcoinAnchor = false
-      for (const a of rest) {
+      let ethRpc: string | undefined
+      let ethMinConfirmations: number | undefined
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
         if (a === '--require-bitcoin-anchor') requireBitcoinAnchor = true
-        else positional.push(a)
+        else if (a === '--eth-rpc') {
+          if (rest[i + 1] === undefined) die('--eth-rpc requires a URL argument')
+          ethRpc = rest[++i]
+        } else if (a === '--eth-min-confirmations') {
+          if (rest[i + 1] === undefined) die('--eth-min-confirmations requires an argument')
+          const n = Number.parseInt(rest[++i]!, 10)
+          if (!Number.isInteger(n) || n < 1) die('--eth-min-confirmations must be a positive integer')
+          ethMinConfirmations = n
+        } else positional.push(a)
       }
       if (positional.length < 3) die('verify: need <file> <envelope> <ots>')
-      cmdVerify({
+      await cmdVerify({
         inputFile: positional[0]!,
         envelopePath: positional[1]!,
         otsPath: positional[2]!,
         requireBitcoinAnchor,
+        ...(ethRpc !== undefined ? { ethRpc } : {}),
+        ...(ethMinConfirmations !== undefined ? { ethMinConfirmations } : {}),
       })
+      return
+    }
+    case 'attach-eth-anchor': {
+      const positional: string[] = []
+      let contract: string | undefined
+      let registrant: string | undefined
+      let txHash: string | undefined
+      let logIndex: number | undefined
+      let blockNumber: number | undefined
+      let chainId = CANONICAL_CHAIN_ID as number
+      let outPath: string | undefined
+      const reqInt = (flag: string, val: string | undefined): number => {
+        if (val === undefined) die(`${flag} requires an integer argument`)
+        const n = Number.parseInt(val, 10)
+        if (!Number.isInteger(n) || n < 0) die(`${flag} must be a non-negative integer`)
+        return n
+      }
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--contract') contract = rest[++i]
+        else if (a === '--registrant') registrant = rest[++i]
+        else if (a === '--tx-hash') txHash = rest[++i]
+        else if (a === '--log-index') logIndex = reqInt(a, rest[++i])
+        else if (a === '--block-number') blockNumber = reqInt(a, rest[++i])
+        else if (a === '--chain-id') chainId = reqInt(a, rest[++i])
+        else if (a === '--out') outPath = rest[++i]
+        else positional.push(a)
+      }
+      if (positional.length < 1) die('attach-eth-anchor: need <envelope>')
+      if (contract === undefined) die('attach-eth-anchor: --contract <0x…> required')
+      if (registrant === undefined) die('attach-eth-anchor: --registrant <0x…> required')
+      if (txHash === undefined) die('attach-eth-anchor: --tx-hash <0x…> required')
+      if (logIndex === undefined) die('attach-eth-anchor: --log-index <n> required')
+      if (blockNumber === undefined) die('attach-eth-anchor: --block-number <n> required')
+      cmdAttachEthAnchor({
+        envelopePath: positional[0]!,
+        contract,
+        registrant,
+        txHash,
+        logIndex,
+        blockNumber,
+        chainId,
+        outPath,
+      })
+      return
+    }
+    case 'registry-build': {
+      const positional: string[] = []
+      let proofRef: string | undefined
+      let title: string | undefined
+      let authorPubkey: string | undefined
+      let authorName: string | undefined
+      let registeredAt: string | undefined
+      let outPath: string | undefined
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--proof-ref') proofRef = rest[++i]
+        else if (a === '--title') title = rest[++i]
+        else if (a === '--author-pubkey') authorPubkey = rest[++i]
+        else if (a === '--author-name') authorName = rest[++i]
+        else if (a === '--registered-at') registeredAt = rest[++i]
+        else if (a === '--out') outPath = rest[++i]
+        else positional.push(a)
+      }
+      if (positional.length < 1) die('registry-build: need <envelope>')
+      cmdRegistryBuild({
+        envelopePath: positional[0]!,
+        proofRef,
+        title,
+        authorPubkey,
+        authorName,
+        registeredAt,
+        outPath,
+      })
+      return
+    }
+    case 'registry-search': {
+      const positional: string[] = []
+      let claimHash: string | undefined
+      let title: string | undefined
+      let author: string | undefined
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--claim-hash') claimHash = rest[++i]
+        else if (a === '--title') title = rest[++i]
+        else if (a === '--author') author = rest[++i]
+        else positional.push(a)
+      }
+      if (positional.length < 1) die('registry-search: need <snapshot.json>')
+      if (claimHash === undefined && title === undefined && author === undefined) {
+        die('registry-search: supply at least one of --claim-hash / --title / --author')
+      }
+      cmdRegistrySearch({ snapshotPath: positional[0]!, claimHash, title, author })
+      return
+    }
+    case 'verify-registry': {
+      const positional: string[] = []
+      let minConfirmations = 6
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--min-confirmations') {
+          const n = Number.parseInt(rest[++i] ?? '', 10)
+          if (!Number.isInteger(n) || n < 1) die('--min-confirmations must be a positive integer')
+          minConfirmations = n
+        } else positional.push(a)
+      }
+      if (positional.length < 1) die('verify-registry: need <snapshot.json>')
+      await cmdVerifyRegistry({ snapshotPath: positional[0]!, minConfirmations })
+      return
+    }
+    case 'registry-priority': {
+      const positional: string[] = []
+      const claimHashes: string[] = []
+      let minConfirmations = 6
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--claim-hash') {
+          const v = rest[++i]
+          if (v === undefined) die('--claim-hash requires an argument')
+          claimHashes.push(v)
+        } else if (a === '--min-confirmations') {
+          const n = Number.parseInt(rest[++i] ?? '', 10)
+          if (!Number.isInteger(n) || n < 1) die('--min-confirmations must be a positive integer')
+          minConfirmations = n
+        } else positional.push(a)
+      }
+      if (positional.length < 1) die('registry-priority: need <snapshot.json>')
+      await cmdRegistryPriority({ snapshotPath: positional[0]!, minConfirmations, claimHashes })
       return
     }
     case 'diagnose': {
