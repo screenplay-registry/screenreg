@@ -51,7 +51,7 @@ You never see Bitcoin, and you never pay any fee. The calendar operators pay the
 
 Yes. But the marginal energy cost of YOUR registration is essentially zero — the same Bitcoin transaction that anchors your registration also anchors thousands of other unrelated fingerprints. You're not commissioning a new transaction; you're sharing one that would happen anyway.
 
-If you object to Bitcoin for environmental reasons, the protocol's `evidenceBundle` is extensible — v2+ may add Ethereum L2 (post-merge proof-of-stake, ~99% less energy) as a parallel anchor. Old v1 proofs remain valid; new proofs can use both.
+If you object to Bitcoin for environmental reasons, the protocol's `evidenceBundle` is extensible — an optional Ethereum-mainnet anchor (post-merge proof-of-stake, ~99% less energy) is specified as a secondary, additive witness. It is never a priority source — Bitcoin stays the sole time + priority anchor — and old v1 proofs remain valid; a new proof can carry both.
 
 ## How long does registration take?
 
@@ -71,7 +71,7 @@ The protocol explicitly DOES NOT depend on any particular calendar operator's co
 
 ## What if Bitcoin itself collapses?
 
-Then your proof loses its anchor — Bitcoin block headers wouldn't be verifiable. This is a multi-decade tail risk. By the time it's a realistic threat, the protocol will have additional parallel anchors (Ethereum L2, Sigstore-style logs, etc.) — additive, not replacements — so you can have a single registration that anchors to MULTIPLE chains. As long as ONE survives, the proof verifies.
+Then your proof loses its anchor — Bitcoin block headers wouldn't be verifiable. This is a multi-decade tail risk. By the time it's a realistic threat, the protocol will have additional parallel anchors (an optional Ethereum-mainnet anchor, Sigstore-style logs, etc.) — additive, not replacements, and never a priority source — so you can have a single registration that anchors to MULTIPLE chains. As long as ONE survives, the proof verifies.
 
 ## Can I register my screenplay anonymously?
 
@@ -114,13 +114,15 @@ This protocol's evidentiary value will continue to grow as adoption + legal prec
 
 ## Why isn't there a hosted version?
 
-There can be — any vendor may offer a "hosted convenience tier" with extras like email notifications when proofs upgrade, bulk registration, mobile apps, on-chain attestations, etc. The PROTOCOL is always free and runnable yourself. Vendor convenience tiers are optional and orthogonal to the protocol.
+There can be — any operator may offer a "hosted convenience tier" with extras like email notifications when proofs upgrade, bulk registration, mobile apps, a searchable registry listing, or the optional on-chain certificate (the secondary Ethereum-mainnet anchor specified in [spec 09](../spec/v1/09-onchain-anchor.md), coming soon). The PROTOCOL is always free and runnable yourself, and every one of those extras is optional and orthogonal to the free Bitcoin timestamp — none of them is a time or priority source, and none is required to verify a proof.
 
 The deliberate choice to NOT have a single hosted version is what makes the protocol survive its operators — by design, you never need anyone's server to verify your proof.
 
 ## Is this a cryptocurrency thing? Do I need a wallet?
 
-**No.** You don't need a wallet, a token, an ETH balance, or any crypto experience. The protocol uses Bitcoin only as a timestamp medium — you never see Bitcoin, never interact with it, never pay any fee. The "blockchain" part is invisible plumbing.
+**No, not for the default free path.** You don't need a wallet, a token, an ETH balance, or any crypto experience to register and verify. The protocol uses Bitcoin only as a timestamp medium — you never see Bitcoin, never interact with it, never pay any fee. The "blockchain" part is invisible plumbing.
+
+The one place crypto becomes visible is the OPTIONAL on-chain certificate (the secondary Ethereum-mainnet anchor, coming soon). Even there it is gasless: you sign an EIP-712 message and a relayer submits it and pays the gas, so you still never need to FUND a wallet. It is opt-in, never required, and never affects the free Bitcoin timestamp.
 
 ## What's the difference between this and C2PA Content Credentials?
 
@@ -132,11 +134,18 @@ The Screenplay Registry is COMPLEMENTARY:
 
 Long-term, we expect to emit a C2PA sidecar from registrations so screenplays in PDF form can carry both kinds of provenance. v1 doesn't ship that (it was descoped per design review); v2+ may.
 
-## What if a vendor wants to mint an on-chain certificate for an registration?
+## What about an optional on-chain certificate for a registration?
 
-The Screenplay Registry itself does NOT ship any on-chain attestation code — that's intentional. The legal/registry weight of a registration lives entirely in the local manifest + Bitcoin OpenTimestamps anchor. Downstream vendors (writing apps, web tools, foundations) MAY ship their own NFTs or attestations that wrap a registration for public display purposes, but those are vendor products, not part of the protocol.
+The core protocol does NOT require any on-chain code, and the free Bitcoin timestamp ships none. The time/priority weight of a registration lives entirely in the local manifest + Bitcoin OpenTimestamps anchor; nothing on-chain is needed to register or verify.
 
-A recommended vendor-attestation shape is on the roadmap (post-v1). Until then, any vendor attestation that includes the registration's `claimHash` + a pointer to the `.ots` proof is interoperable with the verifier — readers will use the registration's own commitment, not the vendor's wrapper, for ground truth.
+Separately, an OPTIONAL on-chain certificate is specified (coming soon): an Ethereum-mainnet `ScreenplayLedger` event recording the same opaque `claimHash`, plus an optional transferable product NFT. It is an opt-in, additive tier — the Solidity contracts live in a separate repository — that is:
+
+- **never a priority or time source** — Bitcoin remains the sole time + priority anchor, and a missing, failed, or unreachable on-chain check never invalidates an otherwise Bitcoin-valid proof;
+- **never part of the v1 commitment** — no on-chain field is hashed into `claimHash`, and the on-chain plaintext is user-chosen `title`/`name` labels only (the script fingerprint is never published);
+- **content-neutral** — any abuse-control at the relayer is admission / rate-limit / fee / proof-of-work, never a content filter;
+- **not an authorship proof and not a Copyright-Office replacement** — the product NFT confers no rights; transferring it moves a collectible, not rights.
+
+Any on-chain or off-chain attestation that includes the registration's `claimHash` + a pointer to the `.ots` proof is interoperable with the verifier — readers use the registration's own commitment, not any wrapper, for ground truth.
 
 ## Can I compare two registered scripts for similarity?
 

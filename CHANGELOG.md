@@ -4,6 +4,37 @@ All notable changes to The Screenplay Registry are documented here. The format f
 
 The **commitment-bearing identifiers** (URN namespace, profile IDs, normalization profile, hash algorithm, canonicalization scheme) are locked at v1 and will never change within the v1 line. Forward-compatible additions land via new URNs in v2+.
 
+## [Unreleased] — Optional on-chain anchor + registry index (additive tiers)
+
+Two optional, additive tiers layered on top of the frozen v1 core: a secondary Ethereum-mainnet witness and an off-chain registry index. Both are specified and wired into the reference verifier; neither is a time or priority source, neither is required, and neither changes any commitment-bearing byte. Bitcoin via OpenTimestamps remains the sole time + priority anchor. The on-chain contract itself is reserved ("coming soon") — its wire interface is frozen here while the deployed implementation is deferred.
+
+### Optional Ethereum on-chain anchor
+
+- **`ethereum-anchor` evidence proof type** (spec §09, `urn:screenplay-registration-evidence-ethereum-anchor:v1`) — a non-hashed entry in `evidenceBundle.proofs[]` that points at a `Registered` log on Ethereum mainnet recording the same opaque `claimHash`. Like every proof entry it is untrusted metadata, not part of the committed claim. Required fields: `type`, `claimHash`, `chainId`, `contract`, `registrant`, `txHash`, `logIndex`, `blockNumber`. The script fingerprint (`contentHash`) is forbidden on the proof at any depth — a verifier rejects it rather than ignoring it, so the public ledger can never become a membership oracle for the work.
+- **Pinned on-chain interface** — the `ScreenplayLedger` `Registered(bytes32 indexed claimHash, address indexed registrant, uint256 blockTime, string title, string name)` event ABI, the EIP-712 domain (`name: "ScreenplayLedger"`, `version: "1"`), `REGISTER_TYPEHASH`, and the length-only byte caps (`title` ≤ 128, `name` ≤ 64) are pinned in `src/anchors/eth/constants.ts` and mirror spec §09 verbatim. The canonical chain is mainnet (`chainId = 1`), not an L2.
+- **EIP-712 typed-data builder** at `src/anchors/eth/eip712.ts` — computes the domain separator (per the actual chain id, never hard-coded), struct hash, and signing digest for the gasless `registerWithSig` flow. `claimHash` is encoded as `bytes32` with the `sha256:` label stripped. The builder only builds the local signer's digest; signature recovery is never performed off-chain.
+- **Off-chain anchor verifier** at `src/anchors/eth/verify-eth-anchor.ts` — reads the `Registered` log via an injected provider, selects the exact log by `txHash` + `logIndex` (never "first match"), and compares the indexed topics + coordinates against the independently recomputed envelope `claimHash` (never `proof.claimHash` alone). Topics-only: it never fetches calldata and never recovers a signature. Deterministic result taxonomy — `verified` / `not-found` / `unverified` / `rejected`; an RPC failure, an unreachable node, insufficient confirmations, or a reserved `batch` anchor degrade to `unverified` and NONE of them ever flips a Bitcoin verdict.
+- **`batch` field reserved** — the optional batched-receipt mode carries no defined wire format in v1; a batched anchor verifies to `unverified` and the verifier makes no Merkle-path claim.
+
+### Off-chain registry index
+
+- **Registry record** (spec §10, `urn:screenplay-registration-registry-record:v1`) at `src/registry/record.ts` — an off-chain, never-hashed JSON record keyed by `claimHash` with optional public `title` / `author` labels and the anchors needed to re-verify a registration without trusting the operator. `contentHash` is forbidden at any depth; `registeredAt` is informational only and is ignored for priority.
+- **Per-record verification** at `src/registry/verify-index.ts` — each record is checked independently via the existing OTS file-digest verifier against the record's `claimHash` as the expected 32-byte digest, with strict path-traversal guards on the injected proof loader. Heights parsed from an `.ots` attestation stay labeled "OTS-claimed, not Bitcoin-final" unless an injected attestation verifier confirms header inclusion and `minConfirmations`.
+- **Bitcoin-only priority** at `src/registry/priority.ts` — disputes resolve by earliest Bitcoin block height alone; same block is a tie; Ethereum anchors and `registeredAt` never rank; a contest carrying only OTS-claimed (header-unverified) heights is reported undetermined rather than ranked dishonestly.
+- **Honest tamper-evidence framing** — the MVP index is a signed, mirrorable dataset, NOT a tamper-proof log: it gives zero cryptographic protection against operator censorship or equivocation, and each record's truth is its own `.ots` against Bitcoin. A CT-style append-only transparency log is the roadmap target. A real snapshot-Merkle root is deferred until it has its own named, domain-tagged Merkle profile with wire schema and conformance vectors.
+
+### Spec + schema
+
+- **Spec §09** (Optional Ethereum on-chain anchor) and **§10** (Off-chain registry index) added.
+- **`spec/v1/02-envelope.md` §4.2** clarified (additive prose): a verifier MUST NOT reject an envelope solely because a proof carries an unknown `type` or extra fields — an unknown-but-`claimHash`-matching proof is tolerated and reported as UNVERIFIED, never invalid. This codifies behavior the reference verifier already exhibits and changes no committed bytes.
+- **`spec/v1/envelope.schema.json`** gains a conditional dispatch: an `ethereum-anchor` proof must satisfy the strict shape (the six required fields plus the `profile` const when present), while all other and unknown proof types keep the open, tolerant catch-all. Existing `opentimestamps` and unknown-type vectors are unaffected.
+- **`spec/v1/registry-record.schema.json`** defines the registry-record shape (`additionalProperties: false`; no `contentHash` column).
+- New corpus vector `env-111-envelope-with-ethereum-anchor` exercises the tolerant path. Only new vector files were added; no existing vector's claim hash or canonical bytes changed.
+
+### Compatibility
+
+No v1 commitment-bearing surface changed: the normalization profile, canonicalization scheme, claim and envelope URN namespaces, scene-tree and paragraph-tree profile IDs and domain tags, AES-256-GCM AAD format, and Ed25519 registrant wire format are all unchanged byte-for-byte. The new evidence proof type, registry-record URN, and spec sections are additive and non-committing. The peripheral `src/anchors/eth/` module adds a keccak/secp256k1 dependency confined to that module; the commitment-bearing core and the cross-runtime shared modules remain dependency-free.
+
 ## [0.2.0] — Browser-native register + PDF input
 
 The v0.1.0 reference shipped CLI-only. v0.2 makes the protocol usable from a browser tab and lays in the PDF-as-source flow without changing any commitment-bearing surface.

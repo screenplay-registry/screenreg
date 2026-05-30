@@ -29,6 +29,14 @@ Blockchain timestamping services (OriginStamp, Bernstein, Stampd) exist but are 
 
 This protocol fills the gap: **free, open, privacy-first, tool-integrable, asset-agnostic, AI-training-aware, and cryptographically verifiable**.
 
+## Registration tiers
+
+The protocol has one commitment-bearing core and two optional, additive tiers layered on top of it. Only Tier 1 is live; Tiers 2 and 3 are specified and reserved.
+
+- **Tier 1 — Free Bitcoin timestamp (live).** Hash your script locally; anchor the 32-byte claim hash to Bitcoin via OpenTimestamps. No wallet, no crypto, no account, no upload. This is the only tier that carries any time or priority weight, and it is the default everywhere. Everything below is optional and changes nothing about what Tier 1 proves.
+- **Tier 2 — Public registry index (coming soon).** An optional, searchable directory of registrations (look up a claim hash, public title, or public author label). It is a discovery convenience, not an authority: the MVP index gives **zero** cryptographic protection against an operator that censors or equivocates, and each record's truth is its own `.ots` verified against Bitcoin. Priority is decided by Bitcoin block height only. The script fingerprint (`contentHash`) is never published. See [spec 10](spec/v1/10-registry-index.md).
+- **Tier 3 — Optional on-chain certificate (coming soon).** An optional, opt-in record of the same claim hash on Ethereum mainnet (a `ScreenplayLedger` event), plus an optional, transferable product NFT. It is a secondary, additive witness — **never** a time or priority source, never required, and content-neutral by design. The on-chain record is permissionless and permanent: the user-chosen title/name are public and cannot be removed. It does **not** prove authorship and is **not** a Copyright-Office replacement. The interface is frozen in [spec 09](spec/v1/09-onchain-anchor.md); the deployed contract is reserved.
+
 ## What the protocol does NOT do
 
 - **Replace US Copyright Office registration.** For federal-court statutory damages, you still need to register with the Copyright Office. This protocol provides cryptographic evidence; the Copyright Office provides legal procedural standing.
@@ -133,6 +141,8 @@ The protocol's commitment-bearing rules are documented in `/spec/v1/`:
 | [05 — Similarity Commitment Layer](spec/v1/05-similarity.md) | What the claim commits: scene + paragraph Merkle roots and counts only — NOT per-leaf hashes |
 | [06 — Comparison Disclosure Bundle](spec/v1/06-comparison-bundle.md) | Opt-in sidecar revealing per-leaf hashes + word counts + byte ranges so two registrants can compare scripts. Irrevocable once published. |
 | [07 — Time-locked Encrypted Fields](spec/v1/07-timelock.md) | Capability-flagged. Drand quicknet timelock — fields decrypt at a deterministic future Drand round, no third-party escrow. |
+| [09 — Optional Ethereum on-chain anchor](spec/v1/09-onchain-anchor.md) | Optional `ethereum-anchor` evidence proof + the pinned `ScreenplayLedger` interface. Secondary, additive witness on Ethereum mainnet; never a time or priority source; never hashed into `claimHash`. Interface frozen, deployed contract reserved. |
+| [10 — Off-chain registry index](spec/v1/10-registry-index.md) | Optional searchable directory of registrations (`urn:screenplay-registration-registry-record:v1`). A discovery convenience; per-record truth is each record's own `.ots` against Bitcoin. Priority is Bitcoin-only. |
 
 The committed namespace identifiers are **URN-based and brand-neutral**:
 - `urn:screenplay-registration-claim:v1`
@@ -182,7 +192,7 @@ These never change. Brand-related names (CLI command, npm scope, foundation name
 
 ### v0.2 (post-launch)
 - Browser-side full SPV verification with hardcoded Bitcoin block-header checkpoints + public block-explorer fallback
-- Optional Ethereum L2 (Base, via EAS) as a secondary anchor — additive, doesn't change v1 commitments
+- Optional Ethereum-mainnet anchor as a secondary, additive witness (never a priority source; Bitcoin remains the sole time/priority anchor) — see [spec 09](spec/v1/09-onchain-anchor.md); additive, doesn't change v1 commitments
 - Python SDK
 - Trademark-cleared brand name + dedicated domain
 

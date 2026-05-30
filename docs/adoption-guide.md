@@ -131,6 +131,7 @@ Optional but valuable:
 2. **Don't add free credits or rate limits that imply your-org has special access.** The protocol is the protocol; vendor convenience tiers should be transparent.
 3. **Don't claim "court-grade" or "WGA-replacement" in marketing copy.** Both are misleading. Use language like "cryptographically verifiable" and "may be useful as evidence" — same language we use in [`threat-model.md`](threat-model.md).
 4. **Don't reinvent the spec.** If you find yourself needing a new field, normalize profile, or proof type, open a PR. Forking the spec creates incompatibility that hurts everyone.
+5. **Don't market the optional on-chain certificate or NFT as authorship proof.** If you wrap a registration in the optional Ethereum-mainnet anchor or a product NFT, that record proves a specific claim hash was written on-chain — it does NOT prove authorship and is NOT a Copyright-Office replacement. The on-chain anchor is never a time or priority source (Bitcoin is), it is never required, and any relayer or registry-intake gating you add MUST be content-neutral (admission, rate limits, an optional small fee, or light proof-of-work) — never a filter on a script's content. The user-chosen `title`/`name` written on-chain are public and permanent; surface that to the user before they sign.
 
 ## What we expect from integrators
 

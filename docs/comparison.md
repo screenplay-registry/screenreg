@@ -68,7 +68,7 @@ This protocol's value over bare OTS:
 - **Canonical normalization** so verifications survive minor formatting changes (BOM stripping, CRLF→LF, NFC) — same logical script always hashes the same way (within a profile)
 - **Manifest envelope** with metadata (title, author, optional encryption)
 - **Scene-level Merkle tree** for selective disclosure
-- **Forward-compatibility** via the `committedClaim`/`evidenceBundle` split — future anchors (EAS-on-Base, etc.) attach without breaking v1 proofs
+- **Forward-compatibility** via the `committedClaim`/`evidenceBundle` split — future anchors (an optional Ethereum-mainnet anchor, etc.) attach without breaking v1 proofs
 - **Honest verifier UX** with diagnose mode that explains hash failures in plain English
 - **Standard preference field for AI-training opt-out**
 
