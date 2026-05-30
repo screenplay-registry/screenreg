@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>The Screenplay Registry — A protocol for dated authorship claims on screenplays</title>
-<meta name="description" content="A free, open, cryptographically verifiable protocol for dated authorship claims on screenplays. Anchored to Bitcoin via OpenTimestamps. Your script never leaves your laptop." />
+<title>The Screenplay Registry — Free, private, permanent proof your screenplay existed</title>
+<meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment." />
 <style>
   :root {
     --bg: #f6f5f0;
@@ -312,6 +312,123 @@
   .bill-cell.ours .tag { color: var(--gold); }
   .bill-cell.ours .small { color: #c8c3b3; }
   .bill-cell.ours .small em { color: var(--paper); font-style: italic; }
+
+  /* TIERS — reuses .bill-grid / .bill-cell; adds live + coming-soon states */
+  .tier-grid { border-top: 2px solid var(--ink); }
+  .tier-cell { position: relative; }
+  /* Tier 1 — the only live tier; inherits the highlighted .ours treatment */
+  .tier-cell.live .price { color: var(--gold); }
+  .tier-cell.live .price .unit { color: #c8c3b3; }
+  /* Tiers 2 & 3 — present but not yet usable: dashed top edge + desaturated */
+  .tier-cell.soon {
+    background: repeating-linear-gradient(
+      135deg,
+      var(--paper), var(--paper) 11px,
+      #f1ede1 11px, #f1ede1 22px
+    );
+    border-top: 2px dashed var(--muted);
+    margin-top: -2px;
+    color: var(--muted);
+  }
+  .tier-cell.soon h4 { color: var(--ink-soft); }
+  .tier-cell.soon .small { color: var(--muted); }
+  .tier-cell.soon .price { color: var(--muted); font-style: normal; }
+
+  /* status badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border: 1px solid currentColor;
+    align-self: start;
+    white-space: nowrap;
+  }
+  .badge.live { color: var(--gold); }
+  .badge.live .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--gold); display: inline-block;
+  }
+  .badge.soon { color: var(--muted); }
+
+  .tier-cell .price {
+    font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
+    font-size: clamp(40px, 6vw, 72px);
+    line-height: 0.95;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-style: italic;
+    margin: 0;
+    align-self: end;
+  }
+  .tier-cell .price .unit {
+    display: block;
+    font-style: normal;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    font-weight: 400;
+    margin-top: 6px;
+    color: var(--muted);
+  }
+  .tier-cell .tier-cta {
+    align-self: start;
+    margin-top: 4px;
+  }
+  .tier-cell .tier-cta a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px 18px;
+    border: 1.5px solid var(--gold);
+    background: var(--gold);
+    color: var(--ink-strong);
+    border-radius: 0;
+  }
+  .tier-cell .tier-cta a:hover {
+    background: var(--paper);
+    color: var(--ink-strong);
+    border-color: var(--paper);
+  }
+  .tier-cell .tier-note {
+    align-self: start;
+    margin: 0;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .tier-cell .tier-note a {
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule);
+    padding: 0 1px 1px;
+  }
+  .tier-cell .tier-note a:hover { background: var(--ink); color: var(--paper); }
+
+  .notify {
+    margin-top: 22px;
+    padding: 20px 24px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 16px;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+  .notify strong { font-weight: 600; color: var(--ink); }
+  .notify .fine {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    flex-basis: 100%;
+  }
   .bill-cell .tag {
     font-family: ui-monospace, Menlo, monospace;
     font-size: 11px;
@@ -417,13 +534,14 @@
 
   /* responsive */
   @media (max-width: 760px) {
-    .install, .bill-grid, .notdoes, .foot-grid {
+    .install, .bill-grid, .tier-grid, .notdoes, .foot-grid {
       grid-template-columns: 1fr;
     }
     .bill-cell {
       border-right: none;
       border-bottom: 2px solid var(--paper);
     }
+    .tier-cell.soon { margin-top: 0; border-top: 2px dashed var(--muted); }
     .metabox { grid-template-columns: 1fr 1fr; }
     main { padding: 32px 20px 0; }
     h1 { font-size: 36px; }
@@ -436,12 +554,12 @@
   <div class="topbar-inner">
     <span class="brand">The Screenplay Registry</span>
     <nav aria-label="Primary">
-      <a href="#how">Protocol</a>
-      <a href="#bill">Cost</a>
+      <a href="/create/">Register</a>
+      <a href="/verify/">Verify</a>
+      <a href="#tiers">Tiers</a>
       <a href="#scope">Scope</a>
-      <a href="#integrate">CLI</a>
     </nav>
-    <span class="status">v0.1.0 · initial release</span>
+    <span class="status">v0.2 · free tier live</span>
   </div>
 </header>
 
@@ -449,13 +567,13 @@
 
   <!-- HERO -->
   <section class="hero" aria-label="Abstract">
-    <div class="num">Open Protocol · Authorship Timestamps · Reference Implementation v0.1.0</div>
-    <h1>Create a private, dated proof that your screenplay existed — <em>before you share it.</em></h1>
+    <div class="num">Free · Private · Permanent · Anchored to Bitcoin</div>
+    <h1>Prove your screenplay existed — <em>before you send it to anyone.</em></h1>
     <p class="abstract">
-      The Screenplay Registry is a free, open-source script registry for writers. It creates a cryptographic record of your exact draft while keeping the script on your computer.
+      <strong>Free. Private. Permanent.</strong> The Screenplay Registry creates a dated, tamper-evident record of your exact draft — and your script never leaves your computer. No account, no upload, no payment, no wallet.
     </p>
     <p class="abstract">
-      <span class="mono">screenreg</span> fingerprints your Fountain file locally, timestamps that fingerprint through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a>, and gives you a small proof file you can keep forever. Anyone with the original file and proof can verify the record later.
+      Open the page, drop in your script, and in about a minute you get back a small proof file you keep forever. Your draft is fingerprinted in your browser, that fingerprint is timestamped onto the Bitcoin blockchain through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a>, and anyone you choose can later verify the record — with the original file and the proof, no trust in us required.
     </p>
 
     <div class="cta-buttons">
@@ -464,29 +582,18 @@
     </div>
 
     <div class="cta-secondary-links">
-      <a href="#how">Read the protocol</a>
-      <a href="#integrate">Prefer the CLI?</a>
-      <a href="https://github.com/screenplay-registry/screenreg">GitHub</a>
-      <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/threat-model.md">Threat model</a>
+      <a href="#how">How it works</a>
+      <a href="#tiers">The three tiers</a>
+      <a href="#scope">What it does &amp; doesn't prove</a>
+      <a href="https://github.com/screenplay-registry/screenreg">Source &amp; spec</a>
     </div>
-
-    <dl class="metabox">
-      <dt>Identifier</dt>     <dd>urn:screenplay-registration-claim:v1</dd>
-      <dt>Status</dt>         <dd>v0.1.0 · initial release</dd>
-      <dt>Steward</dt>        <dd>Initial contributors</dd>
-      <dt>Future steward</dt> <dd>Independent council (see §5)</dd>
-      <dt>License (code)</dt> <dd>MIT</dd>
-      <dt>License (spec)</dt> <dd>CC-BY 4.0</dd>
-      <dt>License (vectors)</dt><dd>CC0</dd>
-      <dt>Cousins</dt>        <dd>OpenTimestamps, C2PA, Sigstore</dd>
-    </dl>
   </section>
 
   <!-- HOW IT WORKS — 2D SVG diagram -->
   <section class="s" id="how">
     <div class="num">§ 1 · How it works</div>
     <h2>Three deterministic steps. <em>One portable proof.</em></h2>
-    <p>The Fountain manuscript is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Each step runs locally and is reproducible from open-source code and published test vectors. A small <span class="mono">.manifest.json</span> (the envelope) and a self-contained <span class="mono">.proof.ots</span> file are returned — both small enough to email.</p>
+    <p>Your script is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Every step runs in your own browser and is reproducible from open-source code and published test vectors. You get back a small manifest file (the envelope) and a self-contained <span class="mono">.proof.ots</span> file — both small enough to email. Only the 32-byte digest ever leaves your machine; the script itself does not.</p>
 
     <div class="diagram-2d">
       <svg viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -577,14 +684,58 @@
       <div class="lbl"><div class="n">Step 3 · Anchor</div><p>The digest is submitted to OpenTimestamps calendars, which aggregate it with thousands of others into a Merkle root that is committed to Bitcoin. No fee, no wallet, no Bitcoin in sight.</p></div>
     </div>
 
-    <p style="margin-top: 24px;">Identical inputs always produce an identical digest. A counterparty, a defendant's counsel, an academic auditor, or a future maintainer with no relationship to the present steward can reproduce verification offline — using the <span class="mono">.manifest.json</span>, the <span class="mono">.proof.ots</span> file, and a Bitcoin node.</p>
+    <p style="margin-top: 24px;">Identical inputs always produce an identical digest. A counterparty, a defendant's counsel, an academic auditor, or a future maintainer with no relationship to the present steward can reproduce verification offline — using the manifest, the <span class="mono">.proof.ots</span> file, and a Bitcoin node. No server, no account, and no permission from us is ever required.</p>
+  </section>
+
+  <!-- THREE TIERS -->
+  <section class="s" id="tiers">
+    <div class="num">§ 2 · Three tiers</div>
+    <h2>Start free. <em>Add more only if you want it.</em></h2>
+    <p>One registry, three levels of proof. The free tier is live today and is all most writers will ever need. Two optional upgrades are in development — they add a public, searchable listing and a permanent on-chain certificate. Everything beyond the free tier is opt-in and additive: it never changes, weakens, or expires the free Bitcoin proof you already hold.</p>
+
+    <div class="bill-grid tier-grid">
+
+      <!-- Tier 1 — LIVE -->
+      <div class="bill-cell ours tier-cell live">
+        <span class="badge live"><span class="dot"></span> Live now</span>
+        <h4>Free Bitcoin proof</h4>
+        <p class="small">A 32-byte fingerprint of your draft, timestamped onto Bitcoin in about a minute. Your script stays on your machine. Carries a machine-readable <em>do-not-train</em> signal for AI. Private by default — nothing is published unless you choose to.</p>
+        <div class="tier-cta"><a href="/create/"><span class="arrow">→</span> Create a proof</a></div>
+        <p class="price">$0<span class="unit">free forever · no account</span></p>
+      </div>
+
+      <!-- Tier 2 — COMING SOON -->
+      <div class="bill-cell tier-cell soon">
+        <span class="badge soon">Coming soon</span>
+        <h4>Public registry listing</h4>
+        <p class="small">An optional, searchable public listing of your registration — title and name only, by your choice, never your script. A discovery convenience: each record's real proof remains its own Bitcoin timestamp, independent of any list we keep.</p>
+        <p class="tier-note">Design: <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/10-registry-index.md">spec §10 · registry index</a></p>
+        <p class="price">In development<span class="unit">not yet available</span></p>
+      </div>
+
+      <!-- Tier 3 — COMING SOON -->
+      <div class="bill-cell tier-cell soon">
+        <span class="badge soon">Coming soon</span>
+        <h4>On-chain certificate</h4>
+        <p class="small">An optional, permanent, public on-chain record of your registration. Opt-in and gasless — you sign, no wallet funding needed. Permanent and un-removable by design. It does <em>not</em> prove authorship and is not a substitute for registering with the Copyright Office.</p>
+        <p class="tier-note">Design: <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/09-onchain-anchor.md">spec §9 · on-chain anchor</a></p>
+        <p class="price">In development<span class="unit">not yet available</span></p>
+      </div>
+
+    </div>
+
+    <div class="notify">
+      <span><strong>Want to know when the optional tiers ship?</strong> Email us and we'll send one note when they're live — nothing else.</span>
+      <a href="mailto:protocol@screenplayregistry.org?subject=Notify%20me%20about%20Screenplay%20Registry%20tiers">protocol@screenplayregistry.org</a>
+      <span class="fine">No account, no signup form, no tracking. The free tier above already works today — you don't need to wait for anything.</span>
+    </div>
   </section>
 
   <!-- THE BILL -->
   <section class="s tinted" id="bill">
-    <div class="num">§ 2 · Cost</div>
+    <div class="num">§ 3 · Cost</div>
     <h2>Same record. <em>Different bill.</em></h2>
-    <p>You already have two places to deposit a screenplay for a dated record: the Writers Guild and the U.S. Copyright Office. Each gives you a different artifact at a different price. The Registry is a third option that costs nothing and runs on your laptop — not a replacement for the other two, but something you can do alongside them in the time it takes to read this sentence.</p>
+    <p>You already have two places to deposit a screenplay for a dated record: the Writers Guild and the U.S. Copyright Office. Each gives you a different artifact at a different price. The free Registry tier is a third option that costs nothing and runs in your browser — not a replacement for the other two, but something you can do alongside them in the time it takes to read this sentence.</p>
 
     <div class="bill-grid">
       <div class="bill-cell">
@@ -600,7 +751,7 @@
         <div class="big-num">$45</div>
       </div>
       <div class="bill-cell ours">
-        <div class="tag">The Screenplay Registry</div>
+        <div class="tag">The Screenplay Registry · free tier</div>
         <h4>Cryptographic timestamp</h4>
         <p class="small">A 32-byte fingerprint anchored to Bitcoin in about a minute. Script stays on your machine. Use this <em>with</em> the Copyright Office, not instead of it.</p>
         <div class="big-num">$0</div>
@@ -610,7 +761,7 @@
 
   <!-- NOT DOES -->
   <section class="s" id="scope">
-    <div class="num">§ 3 · Out of scope</div>
+    <div class="num">§ 4 · Out of scope</div>
     <h2>Explicit non-goals.</h2>
     <p>The Registry's value depends on honest scope. We are pedantic about what the protocol does and does not do so that lawyers, journalists, and writers can rely on the artifact without misrepresenting it.</p>
 
@@ -618,15 +769,15 @@
       <div class="cell"><span class="k">Does not prove authorship</span><span class="v">A timestamp proves bytes existed at time <em>t</em>. It does not prove who wrote them. Authorship is established by the surrounding chain of custody: drafts, emails, version control, witnesses, deposition.</span></div>
       <div class="cell"><span class="k">Does not replace the Copyright Office</span><span class="v">USCO registration is the procedural prerequisite to sue for infringement and the source of statutory damages. Register with USCO. The Registry is a complement, not a substitute.</span></div>
       <div class="cell"><span class="k">Does not enforce AI opt-out</span><span class="v">The claim record carries a machine-readable opt-out preference mirroring the CAWG training-data-mining assertion (originally part of C2PA). Enforcement is policy, not protocol. We provide the signal; the law and the trainer decide what to do with it.</span></div>
-      <div class="cell"><span class="k">Does not need a wallet</span><span class="v">There is no token, no NFT, no fee, no MetaMask popup. The writer interacts only with the CLI. Bitcoin is an implementation detail of the anchoring layer.</span></div>
+      <div class="cell"><span class="k">Does not need a wallet</span><span class="v">The free tier needs no wallet, no cryptocurrency, and no account — Bitcoin is just the implementation detail of the anchoring layer, with no token, fee, or wallet popup in sight. The optional on-chain certificate is an opt-in upgrade, never required, and is gasless to you when it ships.</span></div>
     </div>
   </section>
 
-  <!-- INTEGRATORS / SPEC EXCERPT -->
+  <!-- DEVELOPERS / INTEGRATORS / SPEC EXCERPT -->
   <section class="s" id="integrate">
-    <div class="num">§ 4 · For integrators</div>
-    <h2>If you ship a screenwriting app, you can add this in <em>a weekend.</em></h2>
-    <p>The reference CLI is in TypeScript, MIT-licensed, dependency-light, and free of cryptographic novelty. Highland, Slugline, WriterDuet, FadeIn, an indie Fountain editor — any of you can drop in a "register this draft" menu item in roughly the time it took to add Export to PDF. The simplest integration spawns the CLI as a subprocess; a typed SDK ships in v0.1.1 once the wire surface settles.</p>
+    <div class="num">§ 5 · For developers &amp; integrators</div>
+    <h2>Add a "Register this draft" button to your app in <em>a weekend.</em></h2>
+    <p>Writers never need the command line — the free tier above is a browser page. This section is for the developers building screenwriting tools. The reference implementation is in TypeScript, MIT-licensed, dependency-light, and free of cryptographic novelty. Any screenwriting app — desktop, web, or an indie Fountain editor — can drop in a "register this draft" action in roughly the time it took to add Export to PDF. The simplest integration spawns the CLI as a subprocess; the same logic also runs in the browser via the shared ES modules behind <span class="mono">/create/</span>.</p>
 
 <pre class="block"><span class="c"># minimal embed — register the current draft from any tool</span>
 <span class="c"># (works wherever you can spawn a subprocess: Electron, Tauri, native bridge, etc.)</span>
@@ -654,22 +805,26 @@
 
   <!-- GOVERNANCE -->
   <section class="s" id="governance">
-    <div class="num">§ 5 · Governance</div>
+    <div class="num">§ 6 · Governance</div>
     <h2>Steward today. Council tomorrow.</h2>
     <p>The protocol is presently maintained by its initial contributors. The roadmap calls for transition to an independent technical council with representation from working screenwriters, integrators, legal practitioners, and protocol engineers (triggered by three external integrators OR six months, whichever comes first). The spec, test vectors, and reference implementation are licensed such that any party may fork and continue the work without our permission and without our cooperation. <strong>That is the point.</strong></p>
 
-    <div class="metabox" style="border-top: 1px solid var(--rule); padding-top: 20px;">
-      <dt>Code</dt><dd>MIT</dd>
-      <dt>Specification</dt><dd>CC-BY 4.0</dd>
-      <dt>Test vectors</dt><dd>CC0</dd>
-      <dt>URN identifier</dt><dd>brand-neutral by design</dd>
-    </div>
+    <dl class="metabox" style="border-top: 1px solid var(--rule); padding-top: 20px;">
+      <dt>Identifier</dt>     <dd>urn:screenplay-registration-claim:v1</dd>
+      <dt>Status</dt>         <dd>v0.2 · free tier live</dd>
+      <dt>Steward</dt>        <dd>Initial contributors</dd>
+      <dt>Future steward</dt> <dd>Independent council</dd>
+      <dt>License (code)</dt> <dd>MIT</dd>
+      <dt>License (spec)</dt> <dd>CC-BY 4.0</dd>
+      <dt>License (vectors)</dt><dd>CC0</dd>
+      <dt>Cousins</dt>        <dd>OpenTimestamps, C2PA, Sigstore</dd>
+    </dl>
   </section>
 
   <!-- SPEC / FOOTER LINKS -->
   <section class="s" id="spec">
-    <div class="num">§ 6 · Specification</div>
-    <h2>The full spec, in seven sections.</h2>
+    <div class="num">§ 7 · Specification</div>
+    <h2>The full spec, section by section.</h2>
     <ul style="font-family: ui-monospace, Menlo, monospace; font-size: 14px; line-height: 2; padding-left: 0; list-style: none;">
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/01-normalization.md">Section 01 · Normalization</a></li>
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/02-envelope.md">Section 02 · Envelope &amp; Claim record (RFC 8785 canonicalization)</a></li>
@@ -678,6 +833,8 @@
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/05-similarity.md">Section 05 · Similarity commitment layer</a></li>
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/06-comparison-bundle.md">Section 06 · Comparison disclosure bundle</a></li>
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/07-timelock.md">Section 07 · Time-locked encrypted fields (Drand)</a></li>
+      <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/09-onchain-anchor.md">Section 09 · Optional on-chain anchor <span style="color: var(--muted)">(design · coming soon)</span></a></li>
+      <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/10-registry-index.md">Section 10 · Public registry index <span style="color: var(--muted)">(design · coming soon)</span></a></li>
       <li style="margin-top: 12px;">→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/threat-model.md" id="threat">docs/threat-model.md · Threat model &amp; non-goals</a></li>
     </ul>
   </section>
@@ -686,7 +843,7 @@
     <div class="foot-grid">
       <div>
         <h5>The Screenplay Registry</h5>
-        <p>A free, open, cryptographically verifiable protocol for dated authorship claims on screenplays. Anchored to Bitcoin via OpenTimestamps. Built by people who have stared at Final Draft for too long.</p>
+        <p>A free, open, cryptographically verifiable protocol for dated authorship claims on screenplays. Anchored to Bitcoin via OpenTimestamps. Built by people who have spent too long staring at a blinking cursor on page one.</p>
       </div>
       <div>
         <h5>Spec</h5>
@@ -706,6 +863,7 @@
         <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/faq.md">FAQ</a>
         <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/adoption-guide.md">Adoption guide</a>
         <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/comparison.md">vs WGA / USCO</a>
+        <a href="mailto:protocol@screenplayregistry.org">protocol@screenplayregistry.org</a>
       </div>
     </div>
     <div class="foot-bottom">
