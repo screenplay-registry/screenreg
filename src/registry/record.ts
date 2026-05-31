@@ -183,13 +183,20 @@ function validateAnchors(value: unknown, errors: string[]): void {
   rejectExtraKeys(errors, 'anchors', a, ['opentimestamps', 'ethereum'])
 }
 
+// A snapshot-local proof reference: no leading slash and no parent-directory
+// traversal, only safe filename/subpath characters. The loader additionally
+// rejects absolute paths and symlinks at read time; enforcing the pattern here
+// (and in the schema) stops an alternate consumer from blessing a traversal-
+// shaped reference it might then read unsafely.
+const PROOF_REF = /^(?!\/)(?!.*\.\.)[A-Za-z0-9._/-]+$/
+
 function validateOpenTimestampsAnchor(value: unknown, errors: string[]): void {
   if (!isPlainObject(value)) {
     errors.push('anchors.opentimestamps: not a plain object')
     return
   }
   const o = value as Record<string, unknown>
-  requireNonEmptyString(errors, 'anchors.opentimestamps.proofRef', o.proofRef)
+  requirePatternedString(errors, 'anchors.opentimestamps.proofRef', o.proofRef, PROOF_REF)
   if (o.bitcoinBlock !== undefined) {
     requireNonNegativeInteger(errors, 'anchors.opentimestamps.bitcoinBlock', o.bitcoinBlock)
   }

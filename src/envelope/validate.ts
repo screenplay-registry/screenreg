@@ -332,35 +332,33 @@ function validateEthereumAnchorProof(
 }
 
 /**
- * Reject the presence of `key` anywhere in `obj` (top-level or nested), bounded
- * by a maximum recursion depth to keep an adversarial deeply-nested input from
- * exhausting the stack. Used to keep `contentHash` (the script fingerprint) off
- * any on-chain-anchor proof — its presence would turn the public ledger into a
- * membership oracle for the work.
+ * Reject the presence of `key` anywhere in `obj` — top-level or nested, through
+ * objects and arrays, at ANY depth. Iterative (explicit stack, no recursion-depth
+ * cap) so an adversary can neither bury `key` below a fixed depth to slip past the
+ * check nor exhaust the call stack with deep nesting. Used to keep `contentHash`
+ * (the script fingerprint) off any on-chain-anchor proof, where its presence would
+ * turn the public ledger into a membership oracle for the work.
  */
 function rejectKeyDeep(
-  obj: Record<string, unknown>,
+  root: Record<string, unknown>,
   key: string,
-  path: string,
+  rootPath: string,
   errors: string[],
-  depth = 0,
 ): void {
-  if (depth > 16) return
-  for (const k of Object.keys(obj)) {
-    if (k === key) {
-      errors.push(
-        `${path}.${k}: contentHash is not permitted on an ethereum-anchor proof (membership-oracle boundary)`,
-      )
-    }
-    const v = obj[k]
-    if (isPlainObject(v)) {
-      rejectKeyDeep(v, key, `${path}.${k}`, errors, depth + 1)
-    } else if (Array.isArray(v)) {
-      v.forEach((item, i) => {
-        if (isPlainObject(item)) {
-          rejectKeyDeep(item, key, `${path}.${k}[${i}]`, errors, depth + 1)
+  const stack: Array<{ node: unknown; path: string }> = [{ node: root, path: rootPath }]
+  while (stack.length > 0) {
+    const { node, path } = stack.pop() as { node: unknown; path: string }
+    if (isPlainObject(node)) {
+      for (const k of Object.keys(node)) {
+        if (k === key) {
+          errors.push(
+            `${path}.${k}: contentHash is not permitted on an ethereum-anchor proof (membership-oracle boundary)`,
+          )
         }
-      })
+        stack.push({ node: node[k], path: `${path}.${k}` })
+      }
+    } else if (Array.isArray(node)) {
+      node.forEach((item, i) => stack.push({ node: item, path: `${path}[${i}]` }))
     }
   }
 }

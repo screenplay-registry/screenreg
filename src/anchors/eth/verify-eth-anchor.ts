@@ -76,6 +76,7 @@ export type EthUnverifiedReason =
 export type EthRejectedReason =
   | 'claimHash-mismatch'
   | 'wrong-chain'
+  | 'event-topic-mismatch'
   | 'contract-mismatch'
   | 'registrant-mismatch'
   | 'claimHash-topic-mismatch'
@@ -154,6 +155,11 @@ export async function verifyEthAnchor(
   }
 
   // 6. Decode topics and compare (topics-only; never calldata, never recovery).
+  // topic[0] is the event signature; an honest RPC filters on it, but re-check it
+  // so a buggy or hostile provider cannot pass off a non-Registered log.
+  if ((log.topics[0] ?? '').toLowerCase() !== REGISTERED_EVENT_TOPIC0.toLowerCase()) {
+    return { status: 'rejected', reason: 'event-topic-mismatch' }
+  }
   if (log.address.toLowerCase() !== proof.contract.toLowerCase()) {
     return { status: 'rejected', reason: 'contract-mismatch' }
   }

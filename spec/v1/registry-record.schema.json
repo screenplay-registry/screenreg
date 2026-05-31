@@ -66,7 +66,8 @@
         "proofRef": {
           "type": "string",
           "minLength": 1,
-          "description": "A snapshot-relative reference (filename) to the record's .ots proof. Resolved ONLY relative to the snapshot directory by the loader; absolute paths, parent-directory traversal, and symlinks are rejected at load time."
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+          "description": "A snapshot-local reference to the record's .ots proof: no leading slash and no parent-directory traversal. Resolved ONLY relative to the snapshot directory by the loader; absolute paths, traversal, and symlinks are also rejected at load time."
         },
         "bitcoinBlock": {
           "type": "integer",

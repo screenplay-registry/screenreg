@@ -137,18 +137,20 @@ describe('CLI: verify-registry (per-record .ots; honest finality; path guards)',
     expect(verify.stdout).not.toMatch(/WINNER/)
   })
 
-  it('rejects a proofRef that traverses out of the snapshot directory', () => {
-    const { snapshotPath } = buildSnapshot('../escape.ots')
-    const verify = runCli(['verify-registry', snapshotPath])
-    expect(verify.code).toBe(2)
-    expect(verify.stdout).toMatch(/escapes the snapshot directory/)
+  it('registry-build rejects a proofRef that traverses out of the snapshot directory', () => {
+    const { envelopePath } = register(tmp, 'c.fountain')
+    const recPath = join(tmp, 'c.record.json')
+    const res = runCli(['registry-build', envelopePath, '--proof-ref', '../escape.ots', '--out', recPath])
+    expect(res.code).not.toBe(0)
+    expect(res.stderr + res.stdout).toMatch(/proofRef/)
   })
 
-  it('rejects an absolute proofRef', () => {
-    const { snapshotPath } = buildSnapshot('/etc/hosts')
-    const verify = runCli(['verify-registry', snapshotPath])
-    expect(verify.code).toBe(2)
-    expect(verify.stdout).toMatch(/must be relative/)
+  it('registry-build rejects an absolute proofRef', () => {
+    const { envelopePath } = register(tmp, 'c.fountain')
+    const recPath = join(tmp, 'c.record.json')
+    const res = runCli(['registry-build', envelopePath, '--proof-ref', '/etc/hosts', '--out', recPath])
+    expect(res.code).not.toBe(0)
+    expect(res.stderr + res.stdout).toMatch(/proofRef/)
   })
 
   it('rejects a symlinked proofRef', () => {

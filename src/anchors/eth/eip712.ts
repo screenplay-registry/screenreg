@@ -66,8 +66,6 @@ export interface RegisterTypedData {
     name: string
     registrant: string
     nonce: string
-    chainId: number
-    verifyingContract: string
   }
 }
 
@@ -109,6 +107,9 @@ function addressWord(address: string): Uint8Array {
 
 /** Encode a `uint256` (number or bigint) as a 32-byte big-endian EVM word. */
 function uint256Word(value: number | bigint): Uint8Array {
+  if (typeof value === 'number' && !Number.isSafeInteger(value)) {
+    throw new Error(`uint256 requires a safe integer or bigint, got ${value}`)
+  }
   let v = typeof value === 'bigint' ? value : BigInt(value)
   if (v < 0n) throw new Error(`uint256 cannot be negative: ${value}`)
   const word = new Uint8Array(32)
@@ -215,8 +216,6 @@ export function buildRegisterTypedData(message: RegisterMessage): RegisterTypedD
       name: message.name,
       registrant: message.registrant,
       nonce: (typeof message.nonce === 'bigint' ? message.nonce : BigInt(message.nonce)).toString(),
-      chainId: message.chainId,
-      verifyingContract: message.verifyingContract,
     },
   }
 }

@@ -68,6 +68,26 @@ describe('ethereum-anchor: happy path', () => {
   })
 })
 
+describe('ethereum-anchor: membership-oracle boundary (contentHash rejected at any depth)', () => {
+  it('rejects a top-level contentHash', () => {
+    expect(bothAgree(wellFormed({ contentHash: CONTENT_HASH })).ok).toBe(false)
+  })
+
+  it('rejects a contentHash buried far below the former depth-16 cutoff (both impls)', () => {
+    // Nest it ~24 levels deep — the old recursion cap bailed at >16 and let this
+    // slip through. Iterative traversal must still catch it.
+    let nested: Record<string, unknown> = { contentHash: CONTENT_HASH }
+    for (let i = 0; i < 24; i++) nested = { wrap: nested }
+    const r = bothAgree(wellFormed({ batch: nested }))
+    expect(r.ok).toBe(false)
+    expect(r.errors.some((e) => e.includes('contentHash'))).toBe(true)
+  })
+
+  it('rejects a contentHash hidden inside a nested array', () => {
+    expect(bothAgree(wellFormed({ extra: [{ deep: [{ contentHash: CONTENT_HASH }] }] })).ok).toBe(false)
+  })
+})
+
 describe('ethereum-anchor: each required field is enforced', () => {
   for (const field of ['chainId', 'contract', 'registrant', 'txHash', 'logIndex', 'blockNumber']) {
     it(`rejects a proof missing "${field}"`, () => {

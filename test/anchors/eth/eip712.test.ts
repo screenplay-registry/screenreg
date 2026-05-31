@@ -133,8 +133,11 @@ describe('buildRegisterTypedData', () => {
       chainId: 1,
       verifyingContract: VERIFYING_CONTRACT,
     })
+    // The signed message carries ONLY the Register struct fields. chainId and
+    // verifyingContract are bound through the EIP-712 domain, not the struct, so
+    // they MUST NOT appear as untyped extra keys in `message`.
     expect(Object.keys(td.message).sort()).toEqual(
-      ['chainId', 'claimHash', 'name', 'nonce', 'registrant', 'title', 'verifyingContract'].sort(),
+      ['claimHash', 'name', 'nonce', 'registrant', 'title'].sort(),
     )
   })
 

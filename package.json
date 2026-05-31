@@ -76,7 +76,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",
     "drand-client": "^1.4.2",
     "tlock-js": "^0.9.0"
