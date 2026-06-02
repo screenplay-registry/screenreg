@@ -18,6 +18,7 @@ import {
 import { buildEncryptedFieldsBlock } from './lib/encrypt/fields.js'
 import { CLAIM_VERSION } from './lib/envelope/types.js'
 import { detectScenes, buildSceneTree } from './lib/merkle/scene-tree.js'
+import { finalizeProof, encodePendingHandle, decodePendingHandle } from './lib/finalize/index.js'
 
 const CALENDARS = [
   'https://a.pool.opentimestamps.org',
@@ -50,10 +51,26 @@ const els = {
   encAuthor: document.getElementById('encAuthor'),
   encPassword: document.getElementById('encPassword'),
   encPassword2: document.getElementById('encPassword2'),
+  ghost: document.getElementById('ghost'),
+  ghostCard: document.getElementById('ghostCard'),
+  ghostHeadline: document.getElementById('ghostHeadline'),
+  ghostDetail: document.getElementById('ghostDetail'),
+  ghostCheck: document.getElementById('ghostCheck'),
+  ghostResume: document.getElementById('ghostResume'),
+  ghostCopy: document.getElementById('ghostCopy'),
+  downloadFinal: document.getElementById('downloadFinal'),
+  pendingList: document.getElementById('pendingList'),
+  pendingItems: document.getElementById('pendingItems'),
 }
 
 let selectedFile = null
 let lastObjectUrls = []
+// Finalize ghost-loader state. `activeFinalize` is the proof currently shown in
+// the card; `pollTimer` is its background re-check timer (cleared on reset).
+let activeFinalize = null
+let pollTimer = null
+const PENDING_STORE_KEY = 'screenreg.pending.v1'
+const POLL_INTERVAL_MS = 60_000
 
 function revokeStaleObjectUrls() {
   for (const u of lastObjectUrls) URL.revokeObjectURL(u)
@@ -330,6 +347,21 @@ async function run() {
       els.downloadIdentityKey.removeAttribute('href')
     }
     els.downloads.hidden = false
+
+    // Stand up the serverless finalize ghost-loader: build a resumable token,
+    // remember it in this browser, put it in the address bar so it survives a
+    // tab close, and start checking for the Bitcoin confirmation. This is a pure
+    // convenience layer over the two files just downloaded — if anything here
+    // throws, the proof is already safely in hand.
+    try {
+      const title = fileForThisRun.name
+      const token = encodePendingHandle({ v: 1, claimHash, ots: otsBytes, title, createdAt: new Date().toISOString() })
+      setResumeHash(token)
+      upsertPendingRecord({ claimHash, title, token, status: 'pending' })
+      showGhostPending(otsBytes, claimHash, title, true) // freshly built here → known valid
+    } catch (e) {
+      console.error('[create] ghost-loader setup failed (non-fatal)', e)
+    }
   } catch (err) {
     const steps = els.stepsRoot.querySelectorAll('.step')
     let marked = false
@@ -377,6 +409,216 @@ function deriveProofRef(filename) {
   return deriveProofName(filename)
 }
 
+// ---- Finalize ghost-loader (serverless, resumable) ----
+
+function loadPendingStore() {
+  try {
+    const raw = localStorage.getItem(PENDING_STORE_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+function savePendingStore(arr) {
+  try {
+    localStorage.setItem(PENDING_STORE_KEY, JSON.stringify(arr.slice(0, 50)))
+  } catch {
+    // localStorage may be disabled (private mode / quota). The dashboard is a
+    // convenience; the address-bar resume link and downloaded files still work.
+  }
+}
+
+function upsertPendingRecord(entry) {
+  const arr = loadPendingStore().filter((e) => e.claimHash !== entry.claimHash)
+  arr.unshift(entry)
+  savePendingStore(arr)
+  renderPendingList()
+}
+
+function markPendingConfirmed(claimHash, heights) {
+  const arr = loadPendingStore().map((e) =>
+    e.claimHash === claimHash ? { ...e, status: 'confirmed', bitcoin: heights } : e,
+  )
+  savePendingStore(arr)
+  renderPendingList()
+}
+
+function renderPendingList() {
+  const arr = loadPendingStore()
+  els.pendingItems.innerHTML = ''
+  if (arr.length === 0) {
+    els.pendingList.hidden = true
+    return
+  }
+  for (const e of arr) {
+    const li = document.createElement('li')
+    const title = document.createElement('span')
+    title.className = 'ph-title'
+    title.textContent = e.title || String(e.claimHash || '').slice(0, 28) + '…'
+    const status = document.createElement('span')
+    if (e.status === 'confirmed') {
+      status.className = 'ph-status confirmed'
+      status.textContent = '✓ on Bitcoin'
+    } else {
+      status.className = 'ph-status'
+      const a = document.createElement('a')
+      a.textContent = 'check / resume →'
+      a.href = '#p=' + e.token
+      status.appendChild(a)
+    }
+    li.appendChild(title)
+    li.appendChild(status)
+    els.pendingItems.appendChild(li)
+  }
+  els.pendingList.hidden = false
+}
+
+/** Put the resume token in the address bar so the link survives a tab close. */
+function setResumeHash(token) {
+  try {
+    const url = new URL(window.location.href)
+    url.hash = 'p=' + token
+    window.history.replaceState(null, '', url.toString())
+  } catch {
+    // history API unavailable — the dashboard + downloaded files are the fallback.
+  }
+}
+
+// `knownValid` is true only for a proof this page just built. For a proof
+// resumed from a #p= link we have NOT yet parsed it, so we show a neutral
+// "checking" headline and let the first finalize check prove it's real (or
+// surface an error) — never claim "valid now" for an unverified token.
+function showGhostPending(otsBytes, claimHash, title, knownValid) {
+  activeFinalize = { otsBytes, claimHash, title }
+  els.ghostCard.classList.remove('confirmed', 'error')
+  if (knownValid) {
+    setPendingValidCopy()
+  } else {
+    els.ghostHeadline.textContent = 'Checking your proof…'
+    els.ghostDetail.textContent =
+      'Reading the proof from your link and asking the calendars whether Bitcoin has confirmed it yet.'
+  }
+  els.downloadFinal.hidden = true
+  els.ghostCheck.hidden = false
+  els.ghostCheck.disabled = false
+  els.ghostCheck.textContent = 'Check now'
+  els.ghostResume.hidden = false
+  els.ghost.hidden = false
+  scheduleFinalizeCheck(0)
+}
+
+function setPendingValidCopy() {
+  els.ghostCard.classList.remove('confirmed', 'error')
+  els.ghostHeadline.textContent = 'Registered — finalizing on Bitcoin…'
+  els.ghostDetail.textContent =
+    'Your proof is valid as a pending calendar attestation. The Bitcoin ' +
+    'confirmation usually lands within 1–6 hours — you can safely close this tab and come back.'
+}
+
+function showGhostError(message) {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+  activeFinalize = null
+  els.ghostCard.classList.remove('confirmed')
+  els.ghostCard.classList.add('error')
+  els.ghostHeadline.textContent = 'Couldn’t read this proof'
+  els.ghostDetail.textContent = message
+  els.ghostCheck.hidden = true
+  els.ghostResume.hidden = true
+  els.downloadFinal.hidden = true
+  els.ghost.hidden = false
+}
+
+function scheduleFinalizeCheck(delayMs) {
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = setTimeout(runFinalizeCheck, delayMs)
+}
+
+async function runFinalizeCheck() {
+  if (!activeFinalize) return
+  const { otsBytes, claimHash, title } = activeFinalize
+  els.ghostCheck.disabled = true
+  els.ghostCheck.textContent = 'Checking…'
+  let result
+  try {
+    result = await finalizeProof({ otsBytes })
+  } catch {
+    result = { status: 'pending' }
+  }
+  // The user may have started a different proof while this check was in flight.
+  if (!activeFinalize || activeFinalize.claimHash !== claimHash) return
+  if (result.status === 'confirmed') {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+    showGhostConfirmed(result.otsBytes, result.bitcoinBlockHeights || [], title)
+    markPendingConfirmed(claimHash, result.bitcoinBlockHeights || [])
+  } else if (result.status === 'error') {
+    // The bytes are not a proof we can parse (e.g. a hand-crafted resume link).
+    // Fail safe: stop polling and say so, rather than claim "valid" forever.
+    showGhostError(
+      'This link does not contain a proof we can read. If you have your screenplay, ' +
+      'manifest, and .ots files, verify them on the verify page instead.',
+    )
+  } else {
+    // pending — the engine parsed the proof, so it IS a valid pending attestation.
+    setPendingValidCopy()
+    els.ghostCheck.disabled = false
+    els.ghostCheck.textContent = 'Check now'
+    scheduleFinalizeCheck(POLL_INTERVAL_MS)
+  }
+}
+
+function showGhostConfirmed(upgradedOts, heights, title) {
+  els.ghostCard.classList.add('confirmed')
+  els.ghostHeadline.textContent = '✓ Confirmed on Bitcoin'
+  els.ghostDetail.textContent = heights.length
+    ? `Anchored at Bitcoin block ${heights.join(', ')}. Your proof is now self-contained — ` +
+      'it verifies against Bitcoin block headers alone, with no calendar or server.'
+    : 'Your proof is now self-contained — it verifies against Bitcoin block headers alone, with no calendar or server.'
+  els.ghostCheck.hidden = true
+  els.ghostResume.hidden = true
+  const blob = new Blob([upgradedOts], { type: 'application/vnd.opentimestamps.v1' })
+  const url = URL.createObjectURL(blob)
+  lastObjectUrls.push(url)
+  els.downloadFinal.href = url
+  els.downloadFinal.download = title ? deriveProofName(title) : 'proof.ots'
+  els.downloadFinal.hidden = false
+  els.ghost.hidden = false
+}
+
+/** Resume a finalize from a `#p=<token>` link (bookmarked or from the dashboard). */
+function resumeFromHash() {
+  const m = /^#p=([A-Za-z0-9_-]+)$/.exec(window.location.hash || '')
+  if (!m) return
+  let handle
+  try {
+    handle = decodePendingHandle(m[1])
+  } catch {
+    return // not a valid resume token — ignore
+  }
+  showGhostPending(handle.ots, handle.claimHash, handle.title || '', false) // resumed → prove it before claiming valid
+}
+
+els.ghostCheck.addEventListener('click', () => {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+  runFinalizeCheck()
+})
+els.ghostCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    els.ghostCopy.textContent = 'Copied ✓'
+    setTimeout(() => { els.ghostCopy.textContent = 'Copy a link to finish later' }, 1600)
+  } catch {
+    // clipboard blocked — the link is already in the address bar.
+  }
+})
+window.addEventListener('hashchange', resumeFromHash)
+
+// On load: show any locally-remembered pending proofs, and resume a finalize if
+// the URL carries a #p=<token> (a bookmarked "finish later" link).
+renderPendingList()
+resumeFromHash()
+
 // ---- Wire up DOM events ----
 
 els.drop.addEventListener('dragover', (e) => {
@@ -417,6 +659,11 @@ function resetSelectionState() {
   els.stepsRoot.hidden = true
   els.downloads.hidden = true
   els.calendarList.innerHTML = ''
+  // Tear down any prior ghost-loader so a fresh registration starts clean. The
+  // local "pending proofs" dashboard persists; only the active card is cleared.
+  els.ghost.hidden = true
+  activeFinalize = null
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
   revokeStaleObjectUrls()
 }
 

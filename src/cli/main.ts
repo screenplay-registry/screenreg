@@ -5,7 +5,7 @@
  *   register <file>            — normalize, build claim, stamp via OTS, emit envelope + .ots
  *   verify <file> <env> <ots>  — binary OK/FAILED verification
  *   diagnose <file> [env] [ots] — honest transform analysis (mode matrix per spec §6)
- *   upgrade <ots>              — block until Bitcoin-confirmed (subprocess to `ots upgrade`)
+ *   finalize <ots>             — fold in the Bitcoin attestation once confirmed (alias: upgrade)
  *   normalize <file>           — debug: print normalized bytes + hash
  *   claim <file>               — debug: build committedClaim + print claimHash
  *   scene-prove <file> <env> <sceneIndex>  — generate selective-disclosure proof
@@ -47,6 +47,7 @@ import {
 import { timelockEncrypt, timelockDecrypt } from '../timelock/drand.js'
 import { submitOts } from '../anchors/ots-submit.js'
 import { verifyOtsAgainstFileDigest, parseOts } from '../anchors/ots-verify.js'
+import { finalizeProof, type FinalizeOptions } from '../shared/finalize/index.js'
 import {
   buildEncryptedFieldsBlock,
   decryptFieldsBlock,
@@ -549,7 +550,7 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
   if (opts.mock) {
     process.stderr.write(`  (Mock mode — proof is a placeholder, not anchored to Bitcoin.)\n`)
   } else {
-    process.stderr.write(`  Bitcoin confirmation typically takes 1-6 hours. Run \`${CLI_NAME} upgrade ${otsOutputPath}\` later.\n`)
+    process.stderr.write(`  Bitcoin confirmation typically takes 1-6 hours. Run \`${CLI_NAME} finalize ${otsOutputPath}\` later.\n`)
   }
 }
 
@@ -719,7 +720,7 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
     process.stdout.write(`  Claim hash:    ${recomputedClaimHash}\n`)
     process.stdout.write(
       `  Bitcoin block: PENDING — proof references calendars: ${otsResult.pendingCalendarUrls.join(', ')}\n` +
-        `                 Run \`${CLI_NAME} upgrade <ots>\` after ~1-6 hours to fold the calendar\n` +
+        `                 Run \`${CLI_NAME} finalize <ots>\` after ~1-6 hours to fold the calendar\n` +
         `                 attestation into a Bitcoin block proof.\n`,
     )
     process.stdout.write(
@@ -863,52 +864,60 @@ function cmdDiagnose(opts: DiagnoseOptions): void {
   }
 }
 
-function cmdUpgrade(otsPath: string): void {
-  // Use the upstream `ots upgrade` CLI which works correctly on a file.
-  //
-  // SECURITY: do NOT search for `.venv/bin/ots` relative to the .ots file's
-  // directory — that path is attacker-influenced (anyone who can hand a user
-  // an .ots file in a directory they control could plant a malicious binary
-  // there and trigger arbitrary code execution).
-  //
-  // Preference order, all rooted in the INVOCATION cwd (not the file path):
-  //   1. SCREENREG_OTS_BIN env var (explicit operator override, absolute path
-  //      recommended; warn if not absolute)
-  //   2. ${cwd}/.venv/bin/ots — matches the README's recommended setup of
-  //      `python3 -m venv .venv && .venv/bin/pip install opentimestamps-client`
-  //      run from the project root
-  //   3. system `ots` on PATH
-  const otsBinary = resolveOtsBinary()
-  // SECURITY: POSIX `--` separator forces the downstream `ots` binary to treat
-  // `otsPath` as a positional argument, even if the path begins with `-`. Without
-  // this, an attacker who can hand a user an `.ots`-like file at a path like
-  // `--evil-flag` would have it parsed as an option by the upstream tool —
-  // argument injection (distinct from shell injection: spawnSync without a shell
-  // is safe from shell metachars but NOT from CLI flag injection).
-  const result = spawnSync(otsBinary, ['upgrade', '--', otsPath], { encoding: 'utf8' })
-  if (result.error || result.status !== 0) {
-    die(
-      `\`${otsBinary} upgrade\` failed: ${result.error?.message ?? result.stderr ?? 'unknown error'}\n` +
-        `Install the upstream client: pip install opentimestamps-client`,
-    )
-  }
-  process.stderr.write(result.stdout)
-  process.stderr.write(result.stderr)
+interface FinalizeCliOptions {
+  otsPath: string
+  /** Where to write the upgraded proof; defaults to overwriting the input in place. */
+  outPath?: string
+  /** Per-calendar request timeout in milliseconds. */
+  timeoutMs?: number
 }
 
-function resolveOtsBinary(): string {
-  const explicit = process.env.SCREENREG_OTS_BIN
-  if (explicit && explicit.length > 0) {
-    if (!explicit.startsWith('/')) {
-      process.stderr.write(
-        `⚠  SCREENREG_OTS_BIN should be an absolute path; got ${JSON.stringify(explicit)}\n`,
-      )
-    }
-    return explicit
+/**
+ * Finalize a pending proof: fold in the Bitcoin attestation once the calendars
+ * have it. Clean-room TypeScript via the shared `finalizeProof` engine — no
+ * Python, no `ots` binary. The same engine powers the browser `/create/` page,
+ * so the CLI and the browser finalize identically.
+ *
+ * Exit codes: 0 = confirmed (proof upgraded and written), 3 = still pending
+ * (no Bitcoin attestation yet; safe to re-run later), 1 = error.
+ */
+async function cmdFinalize(opts: FinalizeCliOptions): Promise<void> {
+  let otsBytes: Uint8Array
+  try {
+    otsBytes = new Uint8Array(readFileSync(opts.otsPath))
+  } catch (err) {
+    die(`finalize: cannot read ${opts.otsPath}: ${err instanceof Error ? err.message : String(err)}`)
   }
-  const cwdVenvOts = join(process.cwd(), '.venv', 'bin', 'ots')
-  if (existsSync(cwdVenvOts)) return cwdVenvOts
-  return 'ots'
+  const finalizeOpts: FinalizeOptions = { otsBytes }
+  if (opts.timeoutMs !== undefined) finalizeOpts.timeoutMs = opts.timeoutMs
+
+  const result = await finalizeProof(finalizeOpts)
+
+  if (result.status === 'error') {
+    die(`finalize: ${result.reason ?? 'could not parse the .ots proof'}`)
+  }
+  if (result.status === 'pending') {
+    process.stderr.write(
+      `⧗  Still pending — the Bitcoin confirmation is not available yet.\n` +
+        `   This is normal in the first ~1-6 hours after registration. The proof is\n` +
+        `   already valid as a pending calendar attestation; re-run \`${CLI_NAME} finalize\`\n` +
+        `   later to fold in the Bitcoin block.\n`,
+    )
+    if (result.pendingCalendars.length > 0) {
+      process.stderr.write(`   Pending calendars: ${result.pendingCalendars.join(', ')}\n`)
+    }
+    process.exit(3)
+  }
+
+  const outPath = opts.outPath ?? opts.otsPath
+  writeFileSync(outPath, Buffer.from(result.otsBytes))
+  const plural = result.bitcoinBlockHeights.length > 1 ? 's' : ''
+  process.stderr.write(
+    `✓  Confirmed on Bitcoin (block height${plural}: ${result.bitcoinBlockHeights.join(', ')}).\n` +
+      `   Wrote the finalized proof to ${outPath}. It now verifies against Bitcoin block\n` +
+      `   headers alone — no calendar or server required.\n`,
+  )
+  process.exit(0)
 }
 
 function cmdNormalize(inputFile: string): void {
@@ -1892,7 +1901,11 @@ function printUsage(): void {
                        it verifies. The original envelope + .ots stay untouched.
   ${CLI_NAME} timelock-decrypt <envelope> <fieldName>
   ${CLI_NAME} generate-identity <output-private-key.pem>
-  ${CLI_NAME} upgrade <ots>
+  ${CLI_NAME} finalize <ots> [--out PATH] [--timeout-ms N]   (alias: upgrade)
+                       Folds the Bitcoin attestation into a pending proof once the
+                       calendars have it (typically 1-6 h after registration). Writes
+                       the upgraded proof in place (or to --out), via the clean-room
+                       TS engine — no Python. Exit: 0 confirmed, 3 still pending, 1 error.
   ${CLI_NAME} normalize <file>
   ${CLI_NAME} claim <file>
   ${CLI_NAME} scene-prove <file> <envelope> <sceneIndex>
@@ -2272,10 +2285,36 @@ async function main(): Promise<void> {
       cmdDiagnose(opts)
       return
     }
-    case 'upgrade':
-      if (rest.length < 1) die('upgrade: need <ots>')
-      cmdUpgrade(rest[0]!)
+    case 'finalize':
+    case 'upgrade': {
+      const positional: string[] = []
+      let outPath: string | undefined
+      let timeoutMs: number | undefined
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--out' || a === '-o') {
+          if (rest[i + 1] === undefined) die('--out requires an argument')
+          outPath = rest[++i]
+        } else if (a === '--timeout-ms') {
+          const v = rest[++i]
+          if (v === undefined) die('--timeout-ms requires an argument')
+          const n = Number(v)
+          if (!Number.isInteger(n) || n <= 0) die(`--timeout-ms: expected a positive integer, got ${JSON.stringify(v)}`)
+          timeoutMs = n
+        } else if (!a.startsWith('-')) {
+          positional.push(a)
+        } else {
+          die(`${cmd}: unexpected argument: ${a}`)
+        }
+      }
+      if (positional.length < 1) die(`${cmd}: need <ots>`)
+      if (positional.length > 1) die(`${cmd}: too many arguments — pass one <ots> path (use --out for a different output path)`)
+      const fo: FinalizeCliOptions = { otsPath: positional[0]! }
+      if (outPath !== undefined) fo.outPath = outPath
+      if (timeoutMs !== undefined) fo.timeoutMs = timeoutMs
+      await cmdFinalize(fo)
       return
+    }
     case 'normalize':
       if (rest.length < 1) die('normalize: need <file>')
       cmdNormalize(rest[0]!)

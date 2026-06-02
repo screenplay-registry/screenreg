@@ -24,6 +24,10 @@
     --pending: #8a6510;
   }
   * { box-sizing: border-box; }
+  /* Ensure the `hidden` attribute always wins: elements with an explicit
+     `display` (e.g. .download-btn { display: inline-flex }) otherwise override
+     the UA `[hidden] { display: none }` rule and stay visible when hidden. */
+  [hidden] { display: none !important; }
   html { background: var(--bg); }
   body {
     margin: 0;
@@ -272,6 +276,60 @@
   footer a { color: var(--ink-soft); border-bottom: 1px solid var(--rule); padding: 0; }
   footer a:hover { background: transparent; color: var(--accent); border-bottom-color: var(--accent); }
 
+  /* Finalize ghost-loader */
+  .ghost { margin-top: 28px; }
+  .ghost-card {
+    padding: 22px 24px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--pending);
+  }
+  .ghost-card.confirmed { border-left-color: var(--ok); }
+  .ghost-card.error { border-left-color: var(--err); }
+  .ghost-card.error .ghost-dot { background: var(--err); animation: none; }
+  .ghost-status {
+    display: flex; align-items: center; gap: 10px;
+    font-family: "American Typewriter", "Courier Prime", monospace;
+    font-weight: 700; font-size: 17px; color: var(--ink);
+  }
+  .ghost-dot {
+    width: 11px; height: 11px; border-radius: 50%; flex: none;
+    background: var(--pending);
+    animation: ghost-pulse 1.4s ease-in-out infinite;
+  }
+  .ghost-card.confirmed .ghost-dot { background: var(--ok); animation: none; }
+  @keyframes ghost-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  .ghost-detail { margin: 12px 0 0; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; }
+  .ghost-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+  .ghost-btn {
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+    padding: 9px 14px; border: 1.5px solid var(--ink);
+    background: var(--paper); color: var(--ink); cursor: pointer;
+  }
+  .ghost-btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+  .ghost-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .ghost-resume { margin: 14px 0 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .ghost-resume button {
+    font-family: inherit; font-size: inherit; color: var(--accent);
+    background: none; border: none; border-bottom: 1px solid var(--accent);
+    padding: 0 0 1px; cursor: pointer;
+  }
+  .pending-list { margin-top: 28px; }
+  .pending-list h2 {
+    font-size: 13px; margin: 0 0 12px; font-weight: 500;
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .pending-list ul { list-style: none; padding: 0; margin: 0; }
+  .pending-list li {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px dashed var(--rule-soft);
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+  }
+  .pending-list .ph-title { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pending-list .ph-status { color: var(--muted); flex: none; }
+  .pending-list .ph-status.confirmed { color: var(--ok); }
+
   @media (max-width: 760px) {
     main { padding: 32px 20px; }
     h1 { font-size: 28px; }
@@ -300,7 +358,7 @@
 
   <label class="drop" id="dropZone">
     <p>Drag a <span class="mono">.fountain</span> file here, or click to choose.</p>
-    <p class="hint">UTF-8 plain text. Up to 8 MB.</p>
+    <p class="hint">Fountain or plain text. PDF writers can use the CLI extractor first. Up to 8 MB.</p>
     <p class="file-name" id="fileName"></p>
     <input type="file" id="fileInput" accept=".fountain,.txt,text/plain,.pdf,application/pdf" />
   </label>
@@ -375,8 +433,32 @@
       <a class="download-btn" id="downloadIdentityKey" hidden><span>→</span> identity.pem</a>
     </div>
     <p class="note">
-      Keep both files together — verification requires the original screenplay file plus these two artifacts. In about 1–6 hours, run <span class="mono">screenreg upgrade proof.ots</span> (or come back to the <a href="/verify/">verify page</a>) to fold in the Bitcoin block attestation.
+      Keep both files together — verification requires the original screenplay file plus these two artifacts. Until the Bitcoin confirmation lands (about 1–6 hours), the proof verifies as a pending calendar attestation; finalize it below to fold in the Bitcoin block — or run <span class="mono">screenreg finalize proof.ots</span> with the CLI.
     </p>
+  </section>
+
+  <section class="ghost" id="ghost" hidden>
+    <div class="ghost-card" id="ghostCard">
+      <div class="ghost-status">
+        <span class="ghost-dot" id="ghostDot"></span>
+        <span id="ghostHeadline">Registered — finalizing on Bitcoin…</span>
+      </div>
+      <p class="ghost-detail" id="ghostDetail">
+        Your proof is valid now as a pending calendar attestation. The Bitcoin confirmation usually lands within 1–6 hours — you can safely close this tab.
+      </p>
+      <div class="ghost-actions">
+        <button class="ghost-btn" id="ghostCheck" type="button">Check now</button>
+        <a class="download-btn" id="downloadFinal" hidden><span>→</span> finalized proof.ots</a>
+      </div>
+      <p class="ghost-resume" id="ghostResume" hidden>
+        Closing the tab? <button type="button" id="ghostCopy">Copy a link to finish later</button> — or just keep your files and re-drop the proof on the <a href="/verify/">verify page</a> anytime.
+      </p>
+    </div>
+  </section>
+
+  <section class="pending-list" id="pendingList" hidden>
+    <h2>Your pending proofs · this browser</h2>
+    <ul id="pendingItems"></ul>
   </section>
 </main>
 
