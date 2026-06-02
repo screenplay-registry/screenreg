@@ -3,188 +3,262 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>The Screenplay Registry Verifier (v0.1.0)</title>
+<title>Verify a proof — The Screenplay Registry</title>
+<meta name="description" content="Check a screenplay timestamp proof against the original file. Verification runs entirely in your browser. Nothing is uploaded." />
+<meta name="referrer" content="no-referrer" />
 <style>
   :root {
-    --bg: #0f0f10;
-    --fg: #f4f3ee;
-    --muted: #888782;
-    --accent: #7dd3fc;
-    --ok: #4ade80;
-    --err: #f87171;
-    --warn: #fbbf24;
-    --panel: #1a1a1c;
-    --border: #2a2a2e;
-    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #f6f5f0;
+    --paper: #fbfaf6;
+    --ink: #161412;
+    --ink-strong: #0a0908;
+    --ink-soft: #2d2a25;
+    --muted: #6a655c;
+    --rule: #d8d4c8;
+    --rule-soft: #e8e4d8;
+    --accent: #b3261a;
+    --accent-dark: #6e1a10;
+    --accent-soft: rgba(179, 38, 26, 0.08);
+    --code-bg: #ece8dc;
+    --ok: #2e6a3a;
+    --err: #8a1a10;
+    --pending: #8a6510;
   }
   * { box-sizing: border-box; }
+  html { background: var(--bg); }
   body {
     margin: 0;
-    padding: 2rem 1rem 4rem;
-    font-family: ui-serif, Georgia, serif;
+    color: var(--ink);
     background: var(--bg);
-    color: var(--fg);
-    line-height: 1.5;
+    font-family: ui-serif, "Iowan Old Style", "Charter", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
-  .wrap { max-width: 760px; margin: 0 auto; }
-  h1 {
-    font-family: var(--mono);
-    font-weight: 500;
-    font-size: 1.4rem;
+  .mono, code, pre { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; }
+  h1, h2 {
+    font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 700;
     letter-spacing: -0.01em;
-    margin: 0 0 0.25rem;
   }
-  .tagline {
-    color: var(--muted);
-    font-size: 0.95rem;
-    margin-bottom: 2.5rem;
-  }
-  .drop {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 2rem;
-    background: var(--panel);
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .drop:hover, .drop.active {
-    border-color: var(--accent);
-    background: #1d2024;
-  }
-  .drop input[type="file"] {
-    display: none;
-  }
-  .drop h2 {
-    font-family: var(--mono);
-    font-weight: 400;
-    font-size: 1rem;
-    margin: 0 0 0.5rem;
+  a {
     color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding: 0 2px 1px;
   }
-  .drop p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.85rem;
+  a:hover { background: var(--accent); color: var(--paper); }
+
+  .topbar {
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 50;
   }
-  .files {
-    margin-top: 1rem;
-    display: grid;
-    gap: 0.5rem;
-  }
-  .file-row {
+  .topbar-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 14px 28px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0.85rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-family: var(--mono);
-    font-size: 0.82rem;
+    gap: 16px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .topbar a { color: var(--ink); border: none; padding: 0; }
+  .topbar a:hover { background: transparent; color: var(--accent); }
+  .brand { font-weight: 700; }
+  .topbar nav { display: flex; gap: 24px; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 48px 28px 64px; }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    font-weight: 500;
+  }
+  .tagline {
+    max-width: 60ch;
+    font-size: 18px;
+    line-height: 1.55;
+    margin: 0 0 36px;
+    color: var(--ink-soft);
+  }
+  .tagline code { font-size: 0.85em; color: var(--ink); }
+
+  .drop {
+    border: 2px dashed var(--rule);
+    background: var(--paper);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 80ms, background 80ms;
+    display: block;
+  }
+  .drop:hover, .drop.active { border-color: var(--accent); background: var(--accent-soft); }
+  .drop input[type="file"] { display: none; }
+  .drop h2 {
+    font-family: ui-monospace, Menlo, monospace;
+    font-weight: 500;
+    font-size: 16px;
+    margin: 0 0 8px;
+    color: var(--ink);
+    letter-spacing: 0;
+  }
+  .drop p { margin: 0; color: var(--muted); font-size: 14px; }
+  .drop p code { color: var(--ink-soft); }
+
+  .files {
+    margin-top: 14px;
+    display: grid;
+    gap: 8px;
+  }
+  .file-row {
+    display: flex;
+    align-items: center;
+    padding: 9px 14px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
   }
   .file-row .kind {
     color: var(--accent);
     text-transform: uppercase;
-    font-size: 0.7rem;
+    font-size: 11px;
     letter-spacing: 0.08em;
+    min-width: 92px;
   }
   .file-row .name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
-    margin: 0 0.75rem;
-    color: var(--fg);
+    margin: 0 12px;
+    color: var(--ink);
   }
-  .file-row .size {
-    color: var(--muted);
-  }
+  .file-row .size { color: var(--muted); }
+
   button.action {
-    margin-top: 1.5rem;
+    margin-top: 24px;
     width: 100%;
-    padding: 0.85rem;
-    border: 0;
-    border-radius: 8px;
+    padding: 16px;
+    border: 1.5px solid var(--accent);
     background: var(--accent);
-    color: #0f0f10;
-    font-family: var(--mono);
-    font-weight: 500;
-    font-size: 0.95rem;
+    color: var(--paper);
+    font-family: "American Typewriter", "Courier Prime", monospace;
+    font-weight: 700;
+    font-size: 16px;
     cursor: pointer;
+    transition: background 80ms, border-color 80ms, opacity 80ms;
   }
-  button.action:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  button.action:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
+  button.action:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .result {
-    margin-top: 2rem;
-    padding: 1.5rem;
-    border-radius: 8px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    font-family: var(--mono);
-    font-size: 0.85rem;
+    margin-top: 28px;
+    padding: 22px 24px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-left-width: 3px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13.5px;
+    line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;
+    color: var(--ink-soft);
   }
-  .result.ok { border-color: var(--ok); }
-  .result.err { border-color: var(--err); }
-  .result.pending { border-color: var(--warn); }
+  .result.ok { border-left-color: var(--ok); }
+  .result.err { border-left-color: var(--err); }
+  .result.pending { border-left-color: var(--pending); }
   .result h3 {
-    margin: 0 0 0.75rem;
-    font-family: var(--mono);
-    font-weight: 500;
-    font-size: 1rem;
+    margin: 0 0 12px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-weight: 700;
+    font-size: 16px;
   }
   .ok h3 { color: var(--ok); }
   .err h3 { color: var(--err); }
-  .pending h3 { color: var(--warn); }
-  footer {
-    margin-top: 4rem;
-    padding-top: 2rem;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 0.82rem;
-  }
-  footer a { color: var(--accent); }
+  .pending h3 { color: var(--pending); }
+
   .promise {
-    margin-top: 1rem;
-    font-size: 0.78rem;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    font-size: 14px;
+    line-height: 1.6;
     color: var(--muted);
   }
-  .promise strong { color: var(--fg); }
+  .promise strong { color: var(--ink); font-weight: 600; }
+  .promise code { color: var(--ink-soft); }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  footer a { color: var(--ink-soft); border-bottom: 1px solid var(--rule); padding: 0; }
+  footer a:hover { background: transparent; color: var(--accent); border-bottom-color: var(--accent); }
+
+  @media (max-width: 760px) {
+    .topbar-inner { flex-wrap: wrap; padding: 12px 20px; gap: 4px 18px; }
+    .topbar nav { gap: 18px; }
+    main { padding: 32px 20px 48px; }
+    h1 { font-size: 28px; }
+    .drop { padding: 36px 16px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>The Screenplay Registry Verifier</h1>
-  <p class="tagline">Drag in your screenplay + manifest + .ots proof. Verification runs entirely in your browser. Nothing is uploaded.</p>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><a href="/">The Screenplay Registry</a></span>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/create/">Create a proof</a>
+      <a href="https://github.com/screenplay-registry/screenreg">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <h1>Verify a proof</h1>
+  <p class="tagline">
+    Drop the original screenplay file, the <code>.manifest.json</code> envelope, and the <code>.proof.ots</code> proof. Verification runs entirely in your browser. Nothing is uploaded.
+  </p>
 
   <label class="drop" id="drop">
     <h2>Drop files here, or click to choose</h2>
-    <p>Required: your <code>.fountain</code> script, the <code>.manifest.json</code> envelope, and the <code>.proof.ots</code> binary.</p>
+    <p>Required: the original screenplay file, the <code>.manifest.json</code> envelope, and the <code>.proof.ots</code> file.</p>
     <input type="file" id="file-input" multiple />
   </label>
 
   <div class="files" id="files"></div>
 
-  <button class="action" id="verify-btn" disabled>Verify</button>
+  <button class="action" id="verify-btn" disabled>Verify the proof</button>
 
   <div id="result"></div>
 
   <p class="promise">
-    <strong>Privacy promise:</strong> this page is fully client-side. Your script bytes never leave your browser. Open the Network tab in your dev tools — no upload requests are made.
-    Bitcoin block-header verification (when the proof references one) optionally queries a public block explorer; this version of the verifier reads the asserted block height from the proof and trusts the calendar's claim. For full trustless verification, run the CLI against your own Bitcoin node.
+    <strong>Privacy.</strong> This page is fully client-side; your script bytes never leave your browser. Open the Network tab in your dev tools and you will see no upload requests. When a proof references a Bitcoin block, this verifier reads the asserted block height and trusts the calendar's claim. For fully trustless verification, run the CLI against your own Bitcoin node.
   </p>
 
   <footer>
-    The Screenplay Registry v0.1.0 — reference verifier.
-    <br />Spec: <a href="../spec/v1/">/spec/v1/</a>.
-    <br />CLI: <code>git clone https://github.com/screenplay-registry/screenreg</code> (npm publish in v0.1.1).
+    v0.2 · reference verifier.
+    <br />Spec: <a href="https://github.com/screenplay-registry/screenreg/tree/main/spec/v1">spec/v1/</a>.
+    <br />CLI: <code>git clone https://github.com/screenplay-registry/screenreg</code>
   </footer>
-</div>
+</main>
+
 <script type="module" src="./verifier.js"></script>
 </body>
 </html>
