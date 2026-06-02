@@ -6,7 +6,7 @@ The **commitment-bearing identifiers** (URN namespace, profile IDs, normalizatio
 
 ## [Unreleased] — Optional on-chain anchor + registry index (additive tiers)
 
-Two optional, additive tiers layered on top of the frozen v1 core: a secondary Ethereum-mainnet witness and an off-chain registry index. Both are specified and wired into the reference verifier; neither is a time or priority source, neither is required, and neither changes any commitment-bearing byte. Bitcoin via OpenTimestamps remains the sole time + priority anchor. The on-chain contract itself is reserved ("coming soon") — its wire interface is frozen here while the deployed implementation is deferred.
+Two optional, additive tiers layered on top of the frozen v1 core: a secondary Ethereum-mainnet witness and an off-chain registry index. Both are specified, with verification implemented against an injected provider — no contract is deployed and no hosted index exists. Neither is a time or priority source, neither is required, and neither changes any commitment-bearing byte. Bitcoin via OpenTimestamps remains the sole time + priority anchor. The on-chain contract is not yet deployed: its wire interface is frozen here, while the deployed implementation, a security audit, and legal review are deferred to a future release.
 
 ### Optional Ethereum on-chain anchor
 
@@ -115,7 +115,7 @@ The first public release of the protocol + reference TypeScript implementation. 
 
 - All primitives are standard: SHA-256 (FIPS 180-4), RFC 8785 JCS, AES-256-GCM (NIST SP 800-38D), PBKDF2-HMAC-SHA256 600k iterations (OWASP 2024 minimum), Ed25519 (RFC 8032), BLS12-381 via Drand quicknet, OpenTimestamps → Bitcoin
 - No hand-rolled cryptography; no custom constructions
-- Audited via adversarial LLM-based review prior to release (audit trail in git history)
+- Audited via structured adversarial review against the threat model prior to release (audit trail in git history)
 - Bundle binding via two-stage chain prevents content-hash substitution under SHA-256 collision-resistance assumption
 - Membership-oracle attack defense via opt-in comparison bundles
 - TOCTOU-resistant sensitive-file writes (lstat + O_CREAT|O_EXCL + fchmod 0o600)
@@ -125,7 +125,7 @@ The first public release of the protocol + reference TypeScript implementation. 
 
 ### Governance
 
-- **Phase 1 (current)**: single-steward maintenance
+- **Phase 1 (current)**: maintenance by the initial contributors
 - **Phase 2** (triggered by 3+ external integrators OR 6 months): stewards council with rotating chair
 - **Phase 3** (sustained adoption): fiscal sponsorship under Linux Foundation OpenSSF or equivalent
 - All commitment-bearing identifiers are URN-based and brand-neutral — a future stewardship transition does not invalidate any v1 proof

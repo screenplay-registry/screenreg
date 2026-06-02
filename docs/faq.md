@@ -8,7 +8,7 @@ Two options, equivalent in evidentiary weight:
 
 **Browser (recommended for one-off registrations).** Drag your `.fountain` file into [screenplayregistry.org/create/](https://screenplayregistry.org/create/). The page hashes locally and gives back `manifest.json` + `proof.ots`. No account, no install, no upload.
 
-**CLI (for batch / scripted use).** Install once (`git clone` + `npm install`), then run `./bin/screenreg.mjs register draft.fountain`. Two files appear next to the script.
+**CLI (for batch / scripted use).** Install once (`git clone` + `npm install`), then run `./bin/screenreg.mjs register draft.fountain`. Two files appear next to the script. (It is not published to npm yet; the examples below abbreviate `./bin/screenreg.mjs` as `screenreg`, so alias it in your clone if you like.)
 
 Verification is the same in either path: drag-drop the original screenplay + the two artifacts at [screenplayregistry.org/verify/](https://screenplayregistry.org/verify/), or run `screenreg verify <file> <manifest> <ots>`.
 
@@ -25,7 +25,7 @@ screenreg extract draft.pdf > draft.fountain   # extracts FD-convention text PDF
 screenreg register draft.fountain --source-pdf draft.pdf
 ```
 
-`--source-pdf` records the source-PDF SHA-256 + the extractor's name and version in `evidenceBundle.bundleExtensions.sourceExtractor`, so an archival verifier can prove the registered Fountain came from the asserted PDF.
+`--source-pdf` records the source-PDF SHA-256 + the extracted-Fountain SHA-256 + the extractor's name and version in `evidenceBundle.bundleExtensions.sourceExtractor`. An archival verifier can re-run that same extractor on the asserted PDF and confirm it reproduces the registered Fountain — a reproducibility check that links the PDF to the registered text.
 
 The browser `/create/` page detects PDF drops and surfaces the CLI command. Browser-native PDF extraction is on the roadmap; it needs a browser-compatible PDF parser that won't bloat the page beyond the privacy-first design goals.
 
@@ -39,11 +39,11 @@ PDFs the reference extractor cannot handle (scanned image-only, password-encrypt
 
 ## Is this a substitute for WGA registration?
 
-**Not exactly.** WGA registration's main value is credit arbitration if your project gets made. The protocol does NOT carry that guild-internal weight. WGA is also faster (instant), cheaper for members ($10), but expires every 5 years and uploads the file. Use WGA for credit arbitration; use this protocol for everything else.
+**Not exactly.** WGA registration's main value is credit arbitration if your project gets made. The protocol does NOT carry that guild-internal weight. WGA is also faster (instant) and cheaper for members (~$10; ~$20-25 non-member), but expires every 5 years and uploads the file. Use WGA for credit arbitration; use this protocol for everything else.
 
 ## What does "Bitcoin-anchored" mean in plain English?
 
-When you register, a 32-byte fingerprint of your manifest goes through a public OpenTimestamps "calendar" server. The calendar batches thousands of fingerprints from different people into one cryptographic tree, and puts only the tree's root into a Bitcoin transaction. Bitcoin's distributed ledger then records that root permanently. Anyone with your `.ots` proof file can later check that your specific fingerprint was part of the tree that was committed in that Bitcoin block — proving your fingerprint existed by the block's timestamp.
+When you register, a 32-byte claim hash — the SHA-256 of your canonicalized claim — goes through a public OpenTimestamps "calendar" server. The calendar batches thousands of fingerprints from different people into one cryptographic tree, and puts only the tree's root into a Bitcoin transaction. Bitcoin's distributed ledger then records that root permanently. Anyone with your `.ots` proof file can later check that your specific fingerprint was part of the tree that was committed in that Bitcoin block — proving your fingerprint existed by the block's timestamp.
 
 You never see Bitcoin, and you never pay any fee. The calendar operators pay the Bitcoin transaction fee themselves as a public-good service (the per-fingerprint marginal cost is fractions of a cent).
 
@@ -114,7 +114,7 @@ This protocol's evidentiary value will continue to grow as adoption + legal prec
 
 ## Why isn't there a hosted version?
 
-There can be — any operator may offer a "hosted convenience tier" with extras like email notifications when proofs upgrade, bulk registration, mobile apps, a searchable registry listing, or the optional on-chain certificate (the secondary Ethereum-mainnet anchor specified in [spec 09](../spec/v1/09-onchain-anchor.md), coming soon). The PROTOCOL is always free and runnable yourself, and every one of those extras is optional and orthogonal to the free Bitcoin timestamp — none of them is a time or priority source, and none is required to verify a proof.
+There can be — any operator may offer a "hosted convenience tier" with extras like email notifications when proofs upgrade, bulk registration, mobile apps, a searchable registry listing (specified in [spec 10](../spec/v1/10-registry-index.md), not yet built), or the optional on-chain certificate (the secondary Ethereum-mainnet anchor specified in [spec 09](../spec/v1/09-onchain-anchor.md), not yet deployed). The PROTOCOL is always free and runnable yourself, and every one of those extras is optional and orthogonal to the free Bitcoin timestamp — none of them is a time or priority source, and none is required to verify a proof.
 
 The deliberate choice to NOT have a single hosted version is what makes the protocol survive its operators — by design, you never need anyone's server to verify your proof.
 
@@ -122,7 +122,7 @@ The deliberate choice to NOT have a single hosted version is what makes the prot
 
 **No, not for the default free path.** You don't need a wallet, a token, an ETH balance, or any crypto experience to register and verify. The protocol uses Bitcoin only as a timestamp medium — you never see Bitcoin, never interact with it, never pay any fee. The "blockchain" part is invisible plumbing.
 
-The one place crypto becomes visible is the OPTIONAL on-chain certificate (the secondary Ethereum-mainnet anchor, coming soon). Even there it is gasless: you sign an EIP-712 message and a relayer submits it and pays the gas, so you still never need to FUND a wallet. It is opt-in, never required, and never affects the free Bitcoin timestamp.
+The one place crypto would become visible is the OPTIONAL on-chain certificate (a secondary Ethereum-mainnet anchor that is specified but not yet live). As designed it would be gasless: you sign an EIP-712 message and a relayer submits it and pays the gas, so you would never need to FUND a wallet. It is opt-in, would never be required, and would never affect the free Bitcoin timestamp.
 
 ## What's the difference between this and C2PA Content Credentials?
 
@@ -132,13 +132,13 @@ The Screenplay Registry is COMPLEMENTARY:
 - **C2PA covers images / video / audio / PDFs** — first-class asset types.
 - **Screenplay Registry covers screenplay text** — a first-class asset type C2PA hasn't claimed.
 
-Long-term, we expect to emit a C2PA sidecar from registrations so screenplays in PDF form can carry both kinds of provenance. v1 doesn't ship that (it was descoped per design review); v2+ may.
+Long-term, we expect to emit a C2PA sidecar from registrations so screenplays in PDF form can carry both kinds of provenance. v1 does not ship that; v2+ may.
 
 ## What about an optional on-chain certificate for a registration?
 
 The core protocol does NOT require any on-chain code, and the free Bitcoin timestamp ships none. The time/priority weight of a registration lives entirely in the local manifest + Bitcoin OpenTimestamps anchor; nothing on-chain is needed to register or verify.
 
-Separately, an OPTIONAL on-chain certificate is specified (coming soon): an Ethereum-mainnet `ScreenplayLedger` event recording the same opaque `claimHash`, plus an optional transferable product NFT. It is an opt-in, additive tier — the Solidity contracts live in a separate repository — that is:
+Separately, an OPTIONAL on-chain certificate is specified but not yet live: an Ethereum-mainnet `ScreenplayLedger` event recording the same opaque `claimHash`, plus an optional transferable product NFT. It is an opt-in, additive tier — the Solidity contracts are not yet deployed and require a security audit and legal review before any mainnet launch — designed so that it is:
 
 - **never a priority or time source** — Bitcoin remains the sole time + priority anchor, and a missing, failed, or unreachable on-chain check never invalidates an otherwise Bitcoin-valid proof;
 - **never part of the v1 commitment** — no on-chain field is hashed into `claimHash`, and the on-chain plaintext is user-chosen `title`/`name` labels only (the script fingerprint is never published);
@@ -172,7 +172,7 @@ screenreg similarity mine.comparison-bundle.json theirs.comparison-bundle.json
 #   + coverage-by-words for paragraph layer (typically the most legible number for a court).
 #
 # Add --envelope-a / --envelope-b to additionally verify each bundle's external
-# binding (that its tree roots match the on-chain claim) — recommended when a
+# binding (that its tree roots match the committed claim) — recommended when a
 # bundle comes from a third party.
 ```
 

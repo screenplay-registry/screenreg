@@ -67,7 +67,7 @@ npx tsx scripts/generate-scene-tree-corpus.ts
 
 - TypeScript strict mode (already configured in `tsconfig.json`).
 - Avoid dependencies in `/src/normalize/`, `/src/envelope/`, `/src/merkle/` — these are the commitment-bearing modules and must remain pure-TS / Node-builtin only.
-- `/src/anchors/` is allowed to subprocess Python (the helper script); a future v1.1 may replace it with a clean-room TS calendar submitter.
+- `/src/anchors/` is allowed to subprocess Python (the helper script); a future release may replace it with a clean-room TS calendar submitter.
 
 ## Reporting security issues
 

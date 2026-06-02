@@ -8,7 +8,7 @@ If you build a writing tool — Final Draft, Highland, Fade In, Sudowrite, a web
 
 Writers want one-click registration without leaving their writing environment. The CLI works for power users; tool integration is what makes it ambient — same UX shape as "Save As PDF" or "Export to Final Draft."
 
-For your users, the benefit is: their script gets a free, Bitcoin-anchored timestamp and an AI-training preference signal embedded in your save flow.
+For your users, the benefit is: their script gets a free Bitcoin timestamp (and, if you set it, an AI-training preference signal) embedded in your save flow.
 
 For you, the benefit is a standards-based registration flow with no per-registration fee and no custody of user scripts.
 
@@ -21,11 +21,11 @@ Add a "Register on screenplayregistry.org" menu item that:
 2. Opens the user's default browser to `https://screenplayregistry.org/create/`.
 3. Surfaces a short note prompting them to drag the temp file into the page.
 
-The page handles the hash, calendar fan-out, and proof assembly entirely client-side; your tool never sees the resulting `manifest.json` or `proof.ots` (the user downloads them from the page). Use this when you want zero registration logic in your binary and zero dependency on the screenreg npm package.
+The page handles the hash, calendar fan-out, and proof assembly entirely client-side; your tool never sees the resulting `manifest.json` or `proof.ots` (the user downloads them from the page). Use this when you want zero registration logic in your binary and no dependency on the screenreg codebase.
 
 ### Path B: shell out to the CLI (simplest in-process flow)
 
-Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. Drop the produced `.manifest.json` + `.proof.ots` in a registrations subdirectory next to the script.
+Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. Drop the produced `.manifest.json` + `.proof.ots` in a registrations subdirectory next to the script. (In these examples `screenreg` is the cloned `./bin/screenreg.mjs` — it is not published to npm yet, so resolve the path or alias it in your tool.)
 
 This works in any tool that can spawn a subprocess. Total integration effort: ~1 hour.
 
@@ -48,9 +48,9 @@ Optional flags:
 - `--training-mining notAllowed` — set the AI-training preference
 - `--no-scene-tree` — skip the scene Merkle tree if you don't want selective disclosure
 
-### Path B: import the TypeScript SDK (for JS/TS tools)
+### Path C: import the TypeScript SDK (for JS/TS tools)
 
-For tools built in Node / Electron / browser:
+For tools built in Node / Electron / browser (the package is not yet published to npm — vendor it from a clone or a git dependency for now):
 
 ```typescript
 // All public exports come from the package root. The package's `exports` map
@@ -99,7 +99,7 @@ async function registerScreenplay(fountainBytes: Buffer): Promise<{ envelope: an
 
 The SDK is pure TypeScript (zero deps for normalize/canonicalize/merkle/encrypt; the OTS submit path subprocesses a Python helper, which requires `opentimestamps` installed on the system).
 
-### Path C: shell out to the CLI from a worker (for SaaS)
+### Path D: shell out to the CLI from a worker (for SaaS)
 
 If your tool is server-rendered SaaS:
 - Spawn `screenreg register` from a worker job
@@ -148,4 +148,4 @@ There is no fee or paperwork. The license is MIT for code and CC-BY for the spec
 
 ## Questions
 
-Open an issue at [github.com/the-screenplay-registry/protocol](https://github.com/the-screenplay-registry/protocol) (link forthcoming — currently in private development).
+Open an issue at [github.com/screenplay-registry/screenreg](https://github.com/screenplay-registry/screenreg), or email `protocol@screenplayregistry.org`.

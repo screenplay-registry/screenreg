@@ -41,13 +41,14 @@ We follow coordinated disclosure: we'll work with you on a timeline that lets us
 
 ## Past audits
 
-The protocol has been audited via adversarial review (multiple independent LLM-based audits running structured threat-model prompts) prior to v0.1.0 release. The audit trail is visible in the repository's git history. Formal third-party audit is on the post-launch roadmap.
+The protocol has been audited via structured adversarial review against the threat model prior to the v0.1.0 and v0.2 releases. The audit trail is visible in the repository's git history. Formal third-party audit is on the post-launch roadmap.
 
 ## Supported versions
 
 | Version | Supported |
 |---|---|
-| v0.1.x | ✓ Active |
+| v0.2.x | ✓ Active |
+| v0.1.x | ✓ Security fixes only |
 | v0.0.x (pre-launch wip) | ✗ Not supported |
 
-When v0.2 ships, v0.1 enters a 6-month security-fix-only window before being deprecated.
+With v0.2 shipped, v0.1.x is in a 6-month security-fix-only window before being deprecated.

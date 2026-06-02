@@ -1,8 +1,8 @@
 # The Screenplay Registry
 
-> **A free and open script registry for dated authorship claims.**
+> **A free and open registry for dated, verifiable proof that a screenplay draft existed.**
 
-Register a screenplay, pilot, treatment, or draft by creating a dated, cryptographically verifiable authorship claim. The Screenplay Registry anchors the claim to Bitcoin via OpenTimestamps. Your script stays on your machine; only a hash is published.
+Register a screenplay, pilot, treatment, or draft by creating a dated, cryptographically verifiable record that the exact draft existed. The Screenplay Registry anchors that record to Bitcoin via OpenTimestamps. Your script stays on your machine; only a hash is published.
 
 **Status**: `v0.2.0` — adds the browser-native register flow (`/create/`), the in-browser verifier (`/verify/`), and PDF input via the `screenreg extract` subcommand. No v1 commitment-bearing surface (URN namespaces, profile IDs, normalization profile, canonicalization scheme, scene+paragraph tree formats, AES AAD, Ed25519 wire) changed in v0.2 — a v0.2 verifier should accept v0.1.0 envelopes and `.ots` proofs that are valid against v0.1.0. A fixture-backed cross-version regression test is not yet in place; if you re-verify a v0.1.0 proof under v0.2 and see a difference, please file an issue. See [CHANGELOG.md](CHANGELOG.md) for the full v0.2 scope.
 
@@ -13,10 +13,10 @@ Register a screenplay, pilot, treatment, or draft by creating a dated, cryptogra
 The Screenplay Registry gives a writer the ability to:
 
 1. **Prove a screenplay existed by a specific date** — anchored to Bitcoin via OpenTimestamps. The proof is mathematically verifiable forever, with no dependence on any company, server, or hosted service.
-2. **Signal opt-out from AI training** — a public, machine-readable preference using the C2PA training/mining convention (already honored by Adobe Firefly and Spawning's HaveIBeenTrained registry).
+2. **Signal opt-out from AI training** — a public, machine-readable preference using the CAWG training-data-mining convention (originally part of C2PA), set via the CLI. Honoring it is voluntary; see [`docs/ai-training-signal.md`](docs/ai-training-signal.md).
 3. **Keep the script private** — the protocol commits the *hash* of the script to Bitcoin, not the script itself. The full content never leaves the writer's machine.
 4. **Selectively disclose specific scenes** — via scene-level Merkle proofs ("I can prove scene 47 was in my registered script without revealing the rest").
-5. **Encrypt manifest metadata** — title, author, and other fields can be encrypted with a writer-held password while still committing them into the on-chain claim.
+5. **Encrypt manifest metadata** — title, author, and other fields can be encrypted with a writer-held password while still committing them into the claim that gets timestamped.
 6. **Compare two registered scripts for exact byte-content reuse** — via opt-in comparison disclosure bundles (Section 06). Either side can refuse; comparison is consent-bound, never coerced. The public claim never exposes per-scene fingerprints.
 
 ## Why this exists
@@ -34,15 +34,15 @@ This protocol fills the gap: **free, open, privacy-first, tool-integrable, asset
 The protocol has one commitment-bearing core and two optional, additive tiers layered on top of it. Only Tier 1 is live; Tiers 2 and 3 are specified and reserved.
 
 - **Tier 1 — Free Bitcoin timestamp (live).** Hash your script locally; anchor the 32-byte claim hash to Bitcoin via OpenTimestamps. No wallet, no crypto, no account, no upload. This is the only tier that carries any time or priority weight, and it is the default everywhere. Everything below is optional and changes nothing about what Tier 1 proves.
-- **Tier 2 — Public registry index (coming soon).** An optional, searchable directory of registrations (look up a claim hash, public title, or public author label). It is a discovery convenience, not an authority: the MVP index gives **zero** cryptographic protection against an operator that censors or equivocates, and each record's truth is its own `.ots` verified against Bitcoin. Priority is decided by Bitcoin block height only. The script fingerprint (`contentHash`) is never published. See [spec 10](spec/v1/10-registry-index.md).
-- **Tier 3 — Optional on-chain certificate (coming soon).** An optional, opt-in record of the same claim hash on Ethereum mainnet (a `ScreenplayLedger` event), plus an optional, transferable product NFT. It is a secondary, additive witness — **never** a time or priority source, never required, and content-neutral by design. The on-chain record is permissionless and permanent: the user-chosen title/name are public and cannot be removed. It does **not** prove authorship and is **not** a Copyright-Office replacement. The interface is frozen in [spec 09](spec/v1/09-onchain-anchor.md); the deployed contract is reserved.
+- **Tier 2 — Public registry index (specified; not live).** An optional, searchable directory of registrations (look up a claim hash, public title, or public author label). It is a discovery convenience, not an authority: the MVP index gives **zero** cryptographic protection against an operator that censors or equivocates, and each record's truth is its own `.ots` verified against Bitcoin. Priority is decided by Bitcoin block height only. The script fingerprint (`contentHash`) is never published. See [spec 10](spec/v1/10-registry-index.md).
+- **Tier 3 — Optional on-chain certificate (specified; not live).** An optional, opt-in record of the same claim hash on Ethereum mainnet (a `ScreenplayLedger` event), plus an optional, transferable product NFT. It would be a secondary, additive witness — **never** a time or priority source, never required, and content-neutral by design. As designed, the on-chain record would be permissionless and permanent: the user-chosen title/name would be public and could not be removed. It does **not** prove authorship and is **not** a Copyright-Office replacement. The interface is frozen in [spec 09](spec/v1/09-onchain-anchor.md); the contract is not yet deployed and needs a security audit + legal review before mainnet.
 
 ## What the protocol does NOT do
 
 - **Replace US Copyright Office registration.** For federal-court statutory damages, you still need to register with the Copyright Office. This protocol provides cryptographic evidence; the Copyright Office provides legal procedural standing.
 - **Prove authorship.** It proves a specific normalized byte sequence existed by a Bitcoin block timestamp. It does NOT prove who wrote those bytes. Opt-in identity binding via an Ed25519 `registrant` block (RFC 8032) IS available in v1 — pass `--identity` to `screenreg register` — but it only proves the holder of the private key signed the claim; binding that key to a real-world identity is out of scope.
 - **Prove originality or novelty.** Two writers can independently arrive at similar ideas; the protocol records the order, not the merit.
-- **Enforce AI-training opt-out.** The preference is a public, machine-readable *signal*. Companies that respect it (Adobe Firefly, Spawning) will honor it. Companies that ignore it can still scrape.
+- **Enforce AI-training opt-out.** The preference is a public, machine-readable *signal*. Honoring it is voluntary; a company that ignores it can still scrape. Its value is as dated evidence of intent, not technical enforcement.
 
 See [`docs/threat-model.md`](docs/threat-model.md) for the precise guarantees and limits.
 
@@ -50,7 +50,7 @@ See [`docs/threat-model.md`](docs/threat-model.md) for the precise guarantees an
 
 ### In the browser (recommended)
 
-Drop your `.fountain` file at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page hashes the file locally, sends only the 32-byte claim hash to public OpenTimestamps calendars, and gives you back two files to download: `manifest.json` (the envelope) and `proof.ots` (the Bitcoin timestamp proof). The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
+Drop your `.fountain` file at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page hashes the file locally, sends only the 32-byte claim hash to public OpenTimestamps calendars, and gives you back two files to download: `manifest.json` (the envelope) and `proof.ots` (the Bitcoin timestamp proof). The proof is usable immediately as a pending calendar attestation; the Bitcoin confirmation becomes available about 1–6 hours later; fold it into the proof by running `screenreg upgrade`. The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
 
 Verify any registered proof at [**screenplayregistry.org/verify/**](https://screenplayregistry.org/verify/) by drag-dropping the original file plus the two artifacts. Verification is entirely offline; the page never contacts the protocol's servers.
 
@@ -68,7 +68,8 @@ python3 -m venv .venv && .venv/bin/pip install opentimestamps opentimestamps-cli
 # Register a Fountain screenplay
 ./bin/screenreg.mjs register my-screenplay.fountain
 #   → my-screenplay.fountain.manifest.json
-#   → my-screenplay.fountain.proof.ots
+#   → my-screenplay.fountain.proof.ots   (pending; Bitcoin confirmation ~1-6h)
+#   later: ./bin/screenreg.mjs upgrade my-screenplay.fountain.proof.ots
 
 # Verify any time (offline, never needs the protocol's servers)
 ./bin/screenreg.mjs verify my-screenplay.fountain \
@@ -152,7 +153,7 @@ The committed namespace identifiers are **URN-based and brand-neutral**:
 - `screenplay-registration-merkle/v1`
 - `screenplay-registration-paragraph-merkle/v1`
 
-These never change. Brand-related names (CLI command, npm scope, foundation name) live in a separate "Track B" and can be renamed without breaking any v1 proofs.
+These never change. Brand-related names (CLI command, package/repository name, foundation name) live in a separate "Track B" and can be renamed without breaking any v1 proofs.
 
 ## Repository layout
 
@@ -190,17 +191,21 @@ These never change. Brand-related names (CLI command, npm scope, foundation name
 - Forward-compatibility via envelope split (`committedClaim` + `evidenceBundle`)
 - See [CHANGELOG.md](CHANGELOG.md) for the full v0.1.0 entry.
 
-### v0.2 (post-launch)
-- Browser-side full SPV verification with hardcoded Bitcoin block-header checkpoints + public block-explorer fallback
-- Optional Ethereum-mainnet anchor as a secondary, additive witness (never a priority source; Bitcoin remains the sole time/priority anchor) — see [spec 09](spec/v1/09-onchain-anchor.md); additive, doesn't change v1 commitments
-- Python SDK
-- Trademark-cleared brand name + dedicated domain
+### v0.2 (shipped)
+- Browser-native register flow (`/create/`) and in-browser verifier (`/verify/`)
+- PDF input via the `screenreg extract` subcommand + pluggable extractor
+- See [CHANGELOG.md](CHANGELOG.md) for the full v0.2 entry.
 
-### v0.3+ (community-driven)
+### Planned (v0.3+, community-driven; not yet live)
+- Browser-side full SPV verification with hardcoded Bitcoin block-header checkpoints + public block-explorer fallback
+- Optional Ethereum-mainnet anchor as a secondary, additive witness (never a priority source; Bitcoin remains the sole time/priority anchor) — see [spec 09](spec/v1/09-onchain-anchor.md); additive, doesn't change v1 commitments. Contract not yet deployed; requires a security audit + legal review before mainnet.
+- Public off-chain registry index (signed, mirrorable) — see [spec 10](spec/v1/10-registry-index.md)
+- Python SDK
 - ZK proofs of script properties (word count, contains-string) — proof-types over existing commitment, no migration
 - Sigstore-style optional identity binding via OIDC (carefully — public identity logs need thought)
 - C2PA sidecar export for PDF/manifest interop
 - `screenplay-registration-norm/v2-fountain` lossy normalization profile (coexists with v1-strict)
+- Trademark-cleared brand name + dedicated domain
 
 ## Licenses
 
@@ -210,11 +215,11 @@ These never change. Brand-related names (CLI command, npm scope, foundation name
 
 ## Governance
 
-The Screenplay Registry is an open standard. The protocol spec, the commitment-bearing URN namespace, and the verification semantics are intentionally designed to outlive any single steward or sponsor. Existing proofs remain verifiable forever via the OpenTimestamps Bitcoin anchor regardless of who maintains the reference implementation.
+The Screenplay Registry is an open standard. The protocol spec, the commitment-bearing URN namespace, and the verification semantics are intentionally designed to outlive any single maintainer or sponsor. Existing proofs remain verifiable forever via the OpenTimestamps Bitcoin anchor regardless of who maintains the reference implementation.
 
 ### Roadmap to community governance
 
-- **Phase 1 (current)**: single-steward maintenance by initial contributors.
+- **Phase 1 (current)**: maintenance by the initial contributors.
 - **Phase 2** (triggered by 3+ external integrators OR 6 months, whichever first): stewards council with 2-4 external maintainers, decisions by majority, chair role rotated annually.
 - **Phase 3** (triggered by sustained adoption): fiscal sponsorship under the Linux Foundation OpenSSF (Sigstore precedent) or Open Source Collective.
 

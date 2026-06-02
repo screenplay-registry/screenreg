@@ -13,16 +13,16 @@ Allowed values (per the C2PA convention):
 - `notAllowed` — owner explicitly forbids AI training on this work
 - `constrained` — owner permits some uses but not others; details out of scope for v1
 
-The field's PRESENCE and VALUE are part of the on-chain commitment. Once registered, the signal cannot be modified without invalidating the proof.
+The field's PRESENCE and VALUE are part of the committed claim (timestamped via OpenTimestamps). Once registered, the signal cannot be modified without invalidating the proof.
 
-## Why C2PA convention
+## Why the C2PA / CAWG convention
 
-Reusing the C2PA training/mining assertion shape means the signal is honored from day 1 by every system that already speaks C2PA:
-- **Adobe Firefly** — respects the preference in image training; expected to extend to text in time
-- **Spawning's HaveIBeenTrained registry** — aggregates opt-outs across formats
-- **Future LLM providers** — many have committed to honoring C2PA preferences as the spec matures
+Reusing the CAWG training-data-mining assertion shape (originally part of C2PA) means the declaration is *shaped* to be machine-readable by tools that consume C2PA/CAWG provenance — instead of inventing a parallel format. Whether any given system reads or honors it is entirely up to that system. Honoring is voluntary and, today, aspirational:
+- **Content-provenance tooling** (e.g. Adobe Content Credentials) supports preference signals for images. There is no commitment to honor a screenplay-text declaration, and no path today by which it would read this protocol's manifest.
+- **Opt-out registries** such as Spawning's HaveIBeenTrained aggregate opt-outs that crawlers actually consult — a more plausible route to being seen than a manifest on its own.
+- **Text-model providers** have made no commitment to honor C2PA/CAWG training-mining preferences for screenplay text. Treat honoring as something that may come with adoption, not something that exists now.
 
-By using the same field name + value enumeration, we plug into existing honoring infrastructure rather than building a parallel registry that no one consults.
+Using the same field name and value enumeration keeps the declaration interoperable if honoring infrastructure does emerge. It does not mean any system reads this registry today.
 
 ## What the signal is NOT
 
@@ -35,7 +35,7 @@ By using the same field name + value enumeration, we plug into existing honoring
 ## What the signal IS useful for
 
 1. **Evidence in litigation.** "I publicly declared on $DATE that I did not consent to AI training on this work. The defendant scraped it on $LATER_DATE in defiance of that declaration." This is exactly the kind of evidence that prevailed (in part) in *Bartz v. Anthropic* — the court ruled training on legally-acquired books was fair use, but pirated copies in the training set remained actionable. A public, dated opt-out signal strengthens the "they should have known" argument.
-2. **Coordinating with honoring systems.** As more LLM providers commit to honoring C2PA training-mining preferences, having your signal in a machine-readable, cryptographically-anchored format makes it discoverable by those systems.
+2. **Readiness for honoring systems.** If and as systems commit to honoring C2PA/CAWG training-mining preferences, a machine-readable, cryptographically-anchored declaration is easy for them to discover and act on. None are obligated to today.
 3. **Cultural pressure on holdouts.** A growing public registry of opt-outs raises the reputational cost of training on opted-out works. This is soft power, not hard enforcement, but it's not nothing — see how SBOMs (software bills of materials) went from "weird academic thing" to "industry-standard expectation" over five years.
 4. **Court of public opinion.** When a model is shown to have trained on opted-out works, public discourse can hold the trainer accountable in ways the legal system is too slow to.
 
@@ -51,10 +51,10 @@ By using the same field name + value enumeration, we plug into existing honoring
 If you want maximum effect:
 
 1. **Set the signal at registration time.** Use `--training-mining notAllowed` when running `screenreg register`.
-2. **Make it discoverable.** Publish your manifest publicly (e.g., on your portfolio site) so honoring systems can find it.
+2. **Put the signal where crawlers actually look.** A manifest on a portfolio site is unlikely to be consulted by any training pipeline. Register your opt-out with a list crawlers do consult (e.g., Spawning's HaveIBeenTrained), and embed provenance in the files you actually distribute. The durable value here is the dated, signed declaration itself.
 3. **Use it consistently across works.** A scattered signal is weaker than a uniform one.
 4. **Combine with platform-level opt-outs.** Use Spawning's HaveIBeenTrained registry, set your tools' built-in preferences (Adobe Content Authenticity preferences, etc.).
-5. **Don't overstate.** When citing the signal in a complaint or public statement, describe it as "a public, machine-readable preference declaration honored by [list of systems] and recommended by C2PA." Don't call it a "license" or "binding restriction."
+5. **Don't overstate.** When citing the signal in a complaint or public statement, describe it as "a public, machine-readable, cryptographically-dated preference declaration using the CAWG training-data-mining assertion shape." Don't claim it is *honored by* any named system unless that system has publicly committed to honoring it, and don't call it a "license" or "binding restriction."
 
 ## Note on field syntax
 

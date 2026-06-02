@@ -17,7 +17,7 @@ How this protocol compares to existing options for proving a screenplay existed 
 | **Privacy of content** | Total — stays on your machine | Stored in gov registry | Stored on WGA server | Total | Vendor-dependent |
 | **Selective scene disclosure** | YES (Merkle tree) | No | No | No | No |
 | **Encrypted manifest fields** | YES (AES-256-GCM, owner-key) | No | No | N/A | Vendor-dependent |
-| **AI-training opt-out signal** | YES (C2PA convention) | No | No | No | Some pilots |
+| **AI-training opt-out signal** | Preference field (not enforcement) | No | No | No | Some pilots |
 | **Federal-court statutory damages** | Not directly | YES (post-registration) | No | No | No |
 | **Guild credit arbitration weight** | No | No | YES (WGA-internal) | No | No |
 | **Cryptographic verifiability** | YES (mathematical) | No (database lookup only) | No (file retrieval) | YES | YES (if anchored) |
