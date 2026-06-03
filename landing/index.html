@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <title>The Screenplay Registry — Free, private, permanent proof your screenplay existed</title>
 <meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment." />
 <style>
@@ -78,7 +80,8 @@
   }
   .topbar a { color: var(--ink); border: none; padding: 0; }
   .topbar a:hover { background: transparent; color: var(--accent); }
-  .brand { font-weight: 700; }
+  .brand { font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+  .brand-mark { width: 22px; height: 22px; display: block; flex: none; }
   .topbar nav { display: flex; gap: 24px; }
   .topbar .status { color: var(--muted); }
 
@@ -562,7 +565,7 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand">The Screenplay Registry</span>
+    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark" />The Screenplay Registry</span>
     <nav aria-label="Primary">
       <a href="/create/">Register</a>
       <a href="/verify/">Verify</a>
