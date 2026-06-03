@@ -1,0 +1,24 @@
+# The Screenplay Registry
+
+> A free, open protocol for dated, cryptographically verifiable proof that a screenplay draft existed on a given date. The draft is hashed on the writer's own machine; only a 32-byte fingerprint is timestamped onto Bitcoin via OpenTimestamps. The screenplay itself never leaves the writer's computer.
+
+Key facts, stated accurately: it proves a draft EXISTED at a time (priority in time), not authorship; it complements — and does not replace — the U.S. Copyright Office or Writers Guild registration; it is an open protocol and reference implementation, not a company or a hosted service, and existing proofs verify against Bitcoin forever with no server. This site hosts no screenplays — only documentation — so there is no script corpus here to index or train on.
+
+## Documentation
+
+- [Specification (v1)](https://github.com/screenplay-registry/screenreg/tree/main/spec/v1): the normative protocol — normalization, envelope/claim record, scene + paragraph Merkle trees, encryption, and OpenTimestamps anchoring.
+- [Threat model](https://github.com/screenplay-registry/screenreg/blob/main/docs/threat-model.md): precisely what the protocol does and does NOT prove.
+- [FAQ](https://github.com/screenplay-registry/screenreg/blob/main/docs/faq.md): common questions for writers.
+- [Comparison](https://github.com/screenplay-registry/screenreg/blob/main/docs/comparison.md): how it relates to the Copyright Office, the WGA, and bare OpenTimestamps.
+- [Adoption guide](https://github.com/screenplay-registry/screenreg/blob/main/docs/adoption-guide.md): for developers integrating registration into writing tools.
+
+## Product
+
+- [Create a proof](https://screenplayregistry.org/create/): browser-native registration — drop a Fountain or text file, get back a manifest and a Bitcoin timestamp proof. The script never leaves the tab.
+- [Verify a proof](https://screenplayregistry.org/verify/): check a proof against the original file, entirely in the browser.
+
+## Optional
+
+- [Source code](https://github.com/screenplay-registry/screenreg): MIT-licensed reference implementation (the spec is CC-BY, test vectors CC0).
+- [AI-training signal notes](https://github.com/screenplay-registry/screenreg/blob/main/docs/ai-training-signal.md): what the optional do-not-train preference is, and what it is not.
+- Contact: protocol@screenplayregistry.org

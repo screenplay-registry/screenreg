@@ -7,6 +7,16 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <title>Create a proof — The Screenplay Registry</title>
 <meta name="description" content="Create a private, dated cryptographic proof that your screenplay existed today. Anchored to Bitcoin via OpenTimestamps. Script never leaves your browser." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="The Screenplay Registry" />
+<meta property="og:title" content="Create a proof — The Screenplay Registry" />
+<meta property="og:description" content="Create a private, dated cryptographic proof that your screenplay existed today. Anchored to Bitcoin via OpenTimestamps. Your script never leaves your browser." />
+<meta property="og:url" content="https://screenplayregistry.org/create/" />
+<meta property="og:image" content="https://screenplayregistry.org/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The Screenplay Registry" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="referrer" content="no-referrer" />
 <style>
   :root {
@@ -93,18 +103,21 @@
     max-width: 60ch;
     font-size: 18px;
     line-height: 1.55;
-    margin: 0 0 36px;
+    margin: 0 0 40px;
     color: var(--ink-soft);
   }
 
   .drop {
+    /* display:block is load-bearing: as a <label> this defaults to inline, whose
+       vertical padding overflows and overlaps the paragraphs above and below. */
+    display: block;
     border: 2px dashed var(--rule);
     background: var(--paper);
     padding: 56px 24px;
     text-align: center;
     cursor: pointer;
     transition: border-color 80ms, background 80ms;
-    margin-bottom: 12px;
+    margin: 0 0 32px;
   }
   .drop.hover { border-color: var(--accent); background: var(--accent-soft); }
   .drop p { margin: 0; font-size: 17px; color: var(--ink-soft); }
@@ -361,7 +374,7 @@
 
   <label class="drop" id="dropZone">
     <p>Drag a <span class="mono">.fountain</span> file here, or click to choose.</p>
-    <p class="hint">Fountain or plain text. PDF writers can use the CLI extractor first. Up to 8 MB.</p>
+    <p class="hint">Fountain or plain text, up to 8 MB. Got a PDF? Extract it with the CLI for now — in-browser PDF is coming soon.</p>
     <p class="file-name" id="fileName"></p>
     <input type="file" id="fileInput" accept=".fountain,.txt,text/plain,.pdf,application/pdf" />
   </label>
@@ -374,31 +387,31 @@
     <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer;">
       <input type="checkbox" id="optIdentity" style="margin-top: 4px;" />
       <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Bind my identity (Ed25519).</strong>
-        Generates a fresh Ed25519 keypair, signs the claim body, and embeds
-        the public key in the manifest. You will download the matching
-        <span class="mono">.pem</span> private key alongside the proof —
-        keep it safe; lose it and you lose the ability to later prove key
-        control via challenge-response.
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Sign it with your own key (Ed25519).</strong>
+        Generates a one-time signing key, embeds the public half in your proof,
+        and hands you the private half as a <span class="mono">.pem</span> file to
+        download. Later you can prove you hold that key (challenge-response), which
+        is how you tie the registration to you. Keep the <span class="mono">.pem</span>
+        safe; lose it and you only lose that ability, not the timestamp.
       </span>
     </label>
 
     <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
       <input type="checkbox" id="optSceneTree" style="margin-top: 4px;" checked />
       <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Embed scene-tree Merkle root.</strong>
-        Detects scene headings (<span class="mono">INT.</span> / <span class="mono">EXT.</span> / <span class="mono">EST.</span> / <span class="mono">INT/EXT.</span>) in the Fountain bytes and commits a Merkle root of per-scene hashes. Lets you later prove "scene 47 was in my registered script" without revealing the rest. Adds ~milliseconds to the compute step.
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Build per-scene proofs (on by default).</strong>
+        Detects scene headings (<span class="mono">INT.</span> / <span class="mono">EXT.</span> / <span class="mono">EST.</span> / <span class="mono">INT/EXT.</span>) and commits a compact index of your scenes. Later you can prove that a single scene (say, "scene 47") was in your registered draft without revealing the rest. Adds a few milliseconds.
       </span>
     </label>
 
     <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
       <input type="checkbox" id="optEncrypt" style="margin-top: 4px;" />
       <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Encrypt title and author with a password.</strong>
-        AES-256-GCM, PBKDF2-HMAC-SHA256 at 600,000 iterations. The
-        ciphertext is committed in the claim; the plaintext stays with
-        you. Anyone with the password can decrypt; anyone without sees
-        only the encrypted ciphertext and length-padded buckets.
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Encrypt the title and author.</strong>
+        Locks your title and author name with a password before they go into the
+        proof, so the proof commits to them without exposing them. The plaintext
+        never leaves your machine; anyone with the password can decrypt, anyone
+        without sees only ciphertext (AES-256-GCM, PBKDF2 600,000 iterations).
       </span>
     </label>
 

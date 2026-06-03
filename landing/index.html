@@ -7,6 +7,16 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <title>The Screenplay Registry — Free, private, permanent proof your screenplay existed</title>
 <meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="The Screenplay Registry" />
+<meta property="og:title" content="The Screenplay Registry" />
+<meta property="og:description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer." />
+<meta property="og:url" content="https://screenplayregistry.org/" />
+<meta property="og:image" content="https://screenplayregistry.org/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The Screenplay Registry" />
+<meta name="twitter:card" content="summary_large_image" />
 <style>
   :root {
     --bg: #f6f5f0;
@@ -581,12 +591,12 @@
   <!-- HERO -->
   <section class="hero" aria-label="Abstract">
     <div class="num">A public protocol for private screenplay proofs</div>
-    <h1>Prove your screenplay existed <em>before you send it out.</em></h1>
+    <h1>Create a private, dated proof of your screenplay's existence - <em>without sending it out.</em></h1>
     <p class="abstract">
-      <strong>You finish a draft.</strong> Before you send it around, you want a dated record of the exact file. You shouldn't have to upload your script to another company to get one.
+      <strong>The Screenplay Registry is a free, open-source script registry for writers.</strong> It creates a cryptographic record of your exact draft while keeping the script on your computer. The Screenplay Registry hashes your draft on your own machine and anchors only the 32-byte fingerprint to Bitcoin, through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a>. The script never goes with it.
     </p>
     <p class="abstract">
-      The Screenplay Registry hashes your draft on your own machine and anchors only the 32-byte fingerprint to Bitcoin, through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a>. The script never goes with it. You keep your script along with the two small files it produces: the manifest and the timestamp proof. Later, anyone who has all three can check the date without asking us. They're ordinary files, and open-source tools can read them even if this site goes away.
+      You keep your script along with the two small files it produces: the manifest and the timestamp proof. Anyone with these files can verify your screenplay existed by a certain date.
     </p>
 
     <div class="cta-buttons">
@@ -606,7 +616,7 @@
   <section class="s" id="how">
     <div class="num">§ 1 · How it works</div>
     <h2>Three deterministic steps. <em>One portable proof.</em></h2>
-    <p>Your script is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Every step runs in your own browser and is reproducible from open-source code and published test vectors. You get back a small manifest file (the envelope) and a self-contained <span class="mono">.proof.ots</span> file — both small enough to email. Only the 32-byte digest ever leaves your machine; the script itself does not.</p>
+    <p>Your script is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Every step runs in your own browser and is reproducible from open-source code and published test vectors. You get back a small manifest file (the envelope) and a self-contained <span class="mono">.proof.ots</span> file — both small enough to email. Only the 32-byte digest ever leaves your machine; the script itself does not. The browser takes Fountain or plain text today; PDF screenplays convert to text with the <span class="mono">screenreg extract</span> CLI command, and in-browser PDF support is coming soon.</p>
 
     <div class="diagram-2d">
       <svg viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

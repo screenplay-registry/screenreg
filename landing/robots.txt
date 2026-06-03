@@ -1,0 +1,4 @@
+# robots.txt — The Screenplay Registry
+# Everything served here is public documentation. Crawl freely.
+User-agent: *
+Disallow:

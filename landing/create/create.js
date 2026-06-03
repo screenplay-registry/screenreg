@@ -681,8 +681,7 @@ function onFile(f) {
     const quotedOut = shellQuote(deriveBaseName(f.name) + '.fountain')
     els.fileName.innerHTML =
       `<strong>${escapeText(f.name)}</strong> is a PDF.<br>` +
-      `Browser-native PDF extraction is not yet available. ` +
-      `Run the CLI:<br>` +
+      `In-browser PDF extraction is coming soon. For now, extract it with the CLI:<br>` +
       `<code style="display:block;margin:8px 0;padding:8px 12px;background:var(--code-bg);font-size:13px;">` +
       `screenreg extract ${escapeText(quotedIn)} &gt; ${escapeText(quotedOut)}` +
       `</code>` +
