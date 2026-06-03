@@ -2,10 +2,14 @@
  * Browser-native client-side verifier for The Screenplay Registry.
  *
  * Implements normalize + canonicalize + claim-hash + OTS file-digest check
- * entirely in the browser via Web Crypto API and TextEncoder. Zero npm deps,
- * zero network requests for the core verification path.
+ * entirely in the browser via Web Crypto API and TextEncoder. No npm deps and
+ * no network requests for the verification path; the one import is the project's
+ * own .screenreg container reader (a local, same-origin module — used only to
+ * UNPACK a dropped bundle into its parts, which are then verified by the
+ * independent inline implementation below).
  *
  * What this verifier DOES:
+ *  - Accepts either a single .screenreg bundle or the loose script + manifest + .ots
  *  - Re-normalizes the script per screenplay-registration-norm/v1-strict
  *  - Recomputes the contentHash (SHA-256)
  *  - Recomputes the claimHash via RFC 8785 canonicalization
@@ -20,6 +24,8 @@
  *
  * For full verification, run the CLI.
  */
+
+import { readScreenreg, ScreenregError } from './lib/screenreg/index.js'
 
 // ---------------------------------------------------------------------------
 // HTML escape — applied to EVERY untrusted-data interpolation into innerHTML.
@@ -311,8 +317,41 @@ function fmtBytes(n) {
 
 async function addFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer())
+  if (file.name.endsWith('.screenreg')) {
+    await addBundle(file.name, bytes)
+    return
+  }
   const kind = classify(file.name, bytes)
   collected[kind] = { name: file.name, bytes }
+  render()
+}
+
+// Unpack a dropped .screenreg into its parts (envelope, proof, and — for a full bundle — the
+// screenplay). The unpack uses the project's audited container reader; the resulting bytes are
+// then verified by the independent inline implementation, so a malformed/hostile bundle can only
+// fail verification, never forge a pass.
+async function addBundle(name, bytes) {
+  let parsed
+  try {
+    parsed = await readScreenreg(bytes)
+  } catch (e) {
+    const msg = e instanceof ScreenregError ? e.message : (e && e.message) || String(e)
+    // A bad bundle must not leave previously-collected inputs verifiable behind the error — clear
+    // them and disable the button so the user can't verify stale files they think they replaced.
+    collected.script = null
+    collected.envelope = null
+    collected.ots = null
+    render()
+    resultEl.innerHTML = `<div class="result err"><h3>✗ Could not read ${escapeHtml(name)}</h3>${escapeHtml(msg)}</div>`
+    return
+  }
+  collected.envelope = { name: `envelope.json — from ${name}`, bytes: parsed.envelopeBytes }
+  if (parsed.otsBytes) collected.ots = { name: `proof.ots — from ${name}`, bytes: parsed.otsBytes }
+  // A full bundle supplies the screenplay. An evidence bundle does not — and must NOT wipe a
+  // screenplay the user dropped alongside it, so the drop order doesn't matter.
+  if (parsed.sourceText) {
+    collected.script = { name: `screenplay — embedded in ${name}`, bytes: parsed.sourceText }
+  }
   render()
 }
 
@@ -326,7 +365,10 @@ function render() {
     row.innerHTML = `<span class="kind">${escapeHtml(kind)}</span><span class="name">${escapeHtml(f.name)}</span><span class="size">${escapeHtml(fmtBytes(f.bytes.length))}</span>`
     filesList.appendChild(row)
   }
-  verifyBtn.disabled = !(collected.script && collected.envelope && collected.ots)
+  // The envelope + proof are enough to verify existence + time. The screenplay is optional: with
+  // it, we also confirm the contents (the contentHash). An evidence bundle has no script, and that
+  // is a valid thing to verify.
+  verifyBtn.disabled = !(collected.envelope && collected.ots)
 }
 
 dropZone.addEventListener('click', () => fileInput.click())
@@ -355,13 +397,6 @@ verifyBtn.addEventListener('click', async () => {
 })
 
 async function verifyAll() {
-  const normResult = normalize(collected.script.bytes)
-  if (!normResult.ok) {
-    return { ok: false, status: 'INVALID UTF-8', detail: normResult.detail }
-  }
-  const contentHashBytes = await sha256(normResult.normalized)
-  const contentHashHex = 'sha256:' + toHex(contentHashBytes)
-
   let envelope
   try {
     envelope = JSON.parse(new TextDecoder().decode(collected.envelope.bytes))
@@ -369,13 +404,27 @@ async function verifyAll() {
     return { ok: false, status: 'Malformed manifest JSON', detail: collected.envelope.name }
   }
 
-  const expectedContentHash = envelope?.committedClaim?.contentHash
-  if (contentHashHex !== expectedContentHash) {
-    return {
-      ok: false,
-      status: 'Content hash mismatch',
-      detail: `Your file hashes to ${contentHashHex}\nThe manifest expects ${expectedContentHash}\n\nMost common cause: the file was edited after registration, or it was saved by a different tool with different invisible defaults (BOM / line endings / character composition).`,
-      transforms: normResult.transforms,
+  // The screenplay is optional. With it, confirm the contents (contentHash); without it (an
+  // evidence bundle, or a manifest+proof pair), verify existence + time only.
+  const contentsVerified = !!collected.script
+  let contentHashHex
+  let transforms
+  if (contentsVerified) {
+    const normResult = normalize(collected.script.bytes)
+    if (!normResult.ok) {
+      return { ok: false, status: 'INVALID UTF-8', detail: normResult.detail }
+    }
+    transforms = normResult.transforms
+    const contentHashBytes = await sha256(normResult.normalized)
+    contentHashHex = 'sha256:' + toHex(contentHashBytes)
+    const expectedContentHash = envelope?.committedClaim?.contentHash
+    if (contentHashHex !== expectedContentHash) {
+      return {
+        ok: false,
+        status: 'Content hash mismatch',
+        detail: `Your file hashes to ${contentHashHex}\nThe manifest expects ${expectedContentHash}\n\nMost common cause: the file was edited after registration, or it was saved by a different tool with different invisible defaults (BOM / line endings / character composition).`,
+        transforms: normResult.transforms,
+      }
     }
   }
 
@@ -414,7 +463,8 @@ async function verifyAll() {
     bitcoinAnchored: bitcoinHeights.length > 0,
     bitcoinHeights,
     pendingUrls,
-    contentHash: contentHashHex,
+    contentsVerified,
+    contentHash: contentsVerified ? contentHashHex : envelope.committedClaim?.contentHash,
     claimHash: claimHashHex,
     sceneCount: envelope.committedClaim.sceneCount,
   }
@@ -436,7 +486,12 @@ function renderResult(r) {
     const bitcoinLine = r.bitcoinAnchored
       ? `Bitcoin block:    ${escapeHtml(r.bitcoinHeights.join(', '))} ✓ (attestation parsed; full SPV in v0.2)`
       : `Bitcoin block:    PENDING — calendars: ${escapeHtml(r.pendingUrls.join(', '))}\n                   Re-verify in 1-6 hours after the OTS calendar's batch is included in a Bitcoin block.`
-    resultEl.innerHTML = `<div class="result ${cls}"><h3>${symbol} ${escapeHtml(headline)}</h3>Content hash:     ${escapeHtml(r.contentHash)}
+    // When no screenplay was supplied (an evidence bundle), the date + commitment are verified but
+    // the contents are not — say so plainly rather than implying the script was checked.
+    const contentsLine = r.contentsVerified
+      ? `Content hash:     ${escapeHtml(r.contentHash)} ✓ matches your screenplay`
+      : `Content hash:     ${escapeHtml(r.contentHash || '(none in bundle)')}\n                   NOT checked — no screenplay supplied. This proves a document with this\n                   fingerprint existed by the date below. Drop the screenplay to also confirm the contents.`
+    resultEl.innerHTML = `<div class="result ${cls}"><h3>${symbol} ${escapeHtml(headline)}</h3>${contentsLine}
 Claim hash:       ${escapeHtml(r.claimHash)}
 ${r.sceneCount !== undefined ? `Scene count:      ${escapeHtml(String(r.sceneCount))}\n` : ''}${bitcoinLine}</div>`
   } else {

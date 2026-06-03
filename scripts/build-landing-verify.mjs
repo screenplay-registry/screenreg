@@ -11,7 +11,7 @@
  * landing/verify/ is .gitignored — it is a build artifact.
  */
 
-import { copyFile, mkdir, stat } from 'node:fs/promises'
+import { copyFile, mkdir, stat, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +21,13 @@ const src = resolve(repoRoot, 'verifier-web')
 const dst = resolve(repoRoot, 'landing', 'verify')
 
 const FILES = ['index.html', 'verifier.js']
+
+// The verifier imports the .screenreg container reader to unpack a dropped bundle. Those compiled
+// modules are produced by build:browser under landing/create/lib (build:landing runs it first);
+// copy the subset the verifier needs — the screenreg module and its only runtime dependency,
+// crypto.js — preserving the relative layout so `../crypto.js` resolves from lib/screenreg/.
+const LIB_SRC = resolve(repoRoot, 'landing', 'create', 'lib')
+const LIB_DST = resolve(dst, 'lib')
 
 async function exists(path) {
   try {
@@ -46,6 +53,26 @@ async function main() {
     await copyFile(srcPath, dstPath)
     process.stderr.write(`build-landing-verify: ${srcPath} -> ${dstPath}\n`)
   }
+  await copyVerifierLib()
+}
+
+async function copyVerifierLib() {
+  const cryptoSrc = resolve(LIB_SRC, 'crypto.js')
+  const screenregSrc = resolve(LIB_SRC, 'screenreg')
+  if (!(await exists(cryptoSrc)) || !(await exists(screenregSrc))) {
+    process.stderr.write(
+      `build-landing-verify: missing compiled lib at ${LIB_SRC} — run build:browser first ` +
+        `(build:landing does this for you)\n`,
+    )
+    process.exit(1)
+  }
+  await mkdir(resolve(LIB_DST, 'screenreg'), { recursive: true })
+  await copyFile(cryptoSrc, resolve(LIB_DST, 'crypto.js'))
+  for (const name of await readdir(screenregSrc)) {
+    if (!name.endsWith('.js')) continue // compiled modules only (no .map / .d.ts if ever emitted)
+    await copyFile(resolve(screenregSrc, name), resolve(LIB_DST, 'screenreg', name))
+  }
+  process.stderr.write(`build-landing-verify: ${LIB_SRC}/{crypto.js,screenreg/} -> ${LIB_DST}/\n`)
 }
 
 main().catch((err) => {
