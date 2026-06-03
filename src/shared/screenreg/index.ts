@@ -18,6 +18,7 @@ export {
 
 export {
   BUNDLE_FORMAT,
+  ENTRY_DESCRIPTOR,
   type BundleType,
   type EntryRole,
   type DescriptorEntry,

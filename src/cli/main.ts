@@ -13,7 +13,7 @@
  *   decrypt-field <env> <fieldName>  — prompts for password, decrypts and prints field
  */
 
-import { readFileSync, writeFileSync, existsSync, readSync, openSync, writeSync, closeSync, fchmodSync, lstatSync, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readSync, openSync, writeSync, closeSync, fchmodSync, lstatSync, unlinkSync, mkdirSync } from 'node:fs'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -48,6 +48,16 @@ import { timelockEncrypt, timelockDecrypt } from '../timelock/drand.js'
 import { submitOts } from '../anchors/ots-submit.js'
 import { verifyOtsAgainstFileDigest, parseOts } from '../anchors/ots-verify.js'
 import { finalizeProof, type FinalizeOptions } from '../shared/finalize/index.js'
+import {
+  buildScreenreg,
+  buildEvidenceScreenreg,
+  readScreenreg,
+  unzipStore,
+  ScreenregError,
+  ENTRY_DESCRIPTOR,
+  type BuildBundleInput,
+} from '../shared/screenreg/index.js'
+import type { Envelope as SharedEnvelope } from '../shared/envelope/types.js'
 import { BANNER } from './banner.js'
 import {
   buildEncryptedFieldsBlock,
@@ -1920,6 +1930,18 @@ function printUsage(): void {
                        writes to a file (with a confidence summary on
                        stderr). Recommended flow: extract, manually review
                        the .fountain output, then register that file.
+
+  ${CLI_NAME} pack <envelope.manifest.json> [--source FILE] [--ots FILE]
+                       [--evidence] [--out FILE.screenreg]
+                       Bundles a registration into one .screenreg file. With
+                       --source, the bundle is self-contained (embeds the
+                       screenplay text); without it (or with --evidence), it
+                       is proof-only. The .ots defaults to the proof the
+                       envelope references. claimHash is never changed.
+  ${CLI_NAME} unpack <file.screenreg> [--out-dir DIR]            (alias: open)
+                       Verifies a .screenreg (checks every entry's digest) and
+                       prints what it contains. With --out-dir, also extracts
+                       the files. Exits non-zero if integrity fails.
 `)
 }
 
@@ -2003,6 +2025,208 @@ async function cmdExtract(inputFile: string, opts: ExtractOptions): Promise<void
       process.exit(exit)
     }
     die(`extract failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// pack / unpack — the single-file `.screenreg` container (spec §11)
+// ---------------------------------------------------------------------------
+
+function readBytesOrDie(path: string, ctx: string): Uint8Array {
+  try {
+    const buf = readFileSync(path)
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  } catch (err) {
+    die(`${ctx} ${path}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+interface PackOptions {
+  envelopePath: string
+  sourcePath?: string
+  otsPath?: string
+  outPath?: string
+  evidence: boolean
+}
+
+/**
+ * Zip a registration's loose artifacts into one `.screenreg`. Packs an already-built envelope
+ * (plus its OpenTimestamps proof, and — for a full bundle — the source text). The container is
+ * not commitment-bearing; this never recomputes or alters `claimHash`.
+ */
+async function cmdPack(opts: PackOptions): Promise<void> {
+  if (opts.evidence && opts.sourcePath !== undefined) {
+    die('pack: --evidence and --source are mutually exclusive (an evidence bundle carries no source text)')
+  }
+
+  let envelope: SharedEnvelope
+  try {
+    envelope = JSON.parse(readFileSync(opts.envelopePath, 'utf8')) as SharedEnvelope
+  } catch (err) {
+    die(`pack: cannot read envelope ${opts.envelopePath}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  const validation = validateEnvelope(envelope)
+  if (!validation.ok) {
+    die(`pack: invalid envelope:\n  - ${validation.errors.join('\n  - ')}`)
+  }
+
+  // Resolve the OTS proof bytes: explicit --ots wins; otherwise the proof the envelope references
+  // (proofRef), looked up next to the envelope. basename() on the ref keeps the lookup local.
+  let otsBytes: Uint8Array | undefined
+  const otsProof = envelope.evidenceBundle.proofs.find(
+    (p) => (p as { type?: string }).type === 'opentimestamps',
+  ) as { proofRef?: string } | undefined
+  if (opts.otsPath !== undefined) {
+    otsBytes = readBytesOrDie(opts.otsPath, 'pack: cannot read --ots')
+  } else if (otsProof) {
+    if (!otsProof.proofRef) die('pack: the envelope OTS proof has no proofRef; pass --ots <file.ots>')
+    const otsResolved = join(dirname(opts.envelopePath), basename(otsProof.proofRef))
+    if (!existsSync(otsResolved)) {
+      die(`pack: cannot find the OTS proof "${otsProof.proofRef}" beside the envelope; pass --ots <file.ots>`)
+    }
+    otsBytes = readBytesOrDie(otsResolved, 'pack: cannot read OTS proof')
+  }
+
+  const wantFull = !opts.evidence && opts.sourcePath !== undefined
+  const input: BuildBundleInput = { envelope }
+  if (otsBytes) input.otsBytes = otsBytes
+  if (wantFull) {
+    const sourceBytes = readBytesOrDie(opts.sourcePath!, 'pack: cannot read --source')
+    // Refuse to pack a source that does not hash to the committed contentHash — that would build
+    // a "full" bundle which fails verification, the worst kind of silent footgun.
+    const ch = contentHash(Buffer.from(sourceBytes))
+    if (ch !== envelope.committedClaim.contentHash) {
+      die(
+        `pack: --source does not match the envelope's contentHash\n` +
+          `      source: ${ch ?? '(not valid UTF-8)'}\n` +
+          `      claim:  ${envelope.committedClaim.contentHash}\n` +
+          `      (a full bundle with a mismatched source would fail verification)`,
+      )
+    }
+    input.sourceText = sourceBytes
+  }
+
+  let bundle: Uint8Array
+  try {
+    bundle = wantFull ? await buildScreenreg(input) : await buildEvidenceScreenreg(input)
+  } catch (err) {
+    if (err instanceof ScreenregError) die(`pack: ${err.message}`)
+    throw err
+  }
+
+  const base = opts.envelopePath.endsWith('.manifest.json')
+    ? opts.envelopePath.slice(0, -'.manifest.json'.length)
+    : opts.envelopePath.replace(/\.[^./]+$/, '')
+  const outPath = opts.outPath ?? `${base}${wantFull ? '' : '.evidence'}.screenreg`
+  // Refuse to write THROUGH a pre-existing symlink: writeFileSync follows it, so a link named
+  // like the output but pointing at the envelope (or any other file) would silently clobber the
+  // target. lstat does not follow, so this catches both live and dangling links.
+  let outLstat
+  try {
+    outLstat = lstatSync(outPath)
+  } catch {
+    outLstat = undefined // nothing there yet — fine
+  }
+  if (outLstat?.isSymbolicLink()) {
+    die(`pack: refusing to write through the existing symlink ${outPath}`)
+  }
+  // Never write the bundle directly over one of its own inputs either.
+  const resolvedOut = resolve(outPath)
+  for (const [label, p] of [
+    ['envelope', opts.envelopePath],
+    ['--source', opts.sourcePath],
+    ['--ots', opts.otsPath],
+  ] as const) {
+    if (p !== undefined && resolve(p) === resolvedOut) {
+      die(`pack: --out would overwrite the ${label} input (${p})`)
+    }
+  }
+  try {
+    writeFileSync(outPath, bundle)
+  } catch (err) {
+    die(`pack: cannot write ${outPath}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  process.stderr.write(
+    `✓ packed ${wantFull ? 'full' : 'evidence'} bundle (${bundle.length} bytes) → ${outPath}\n` +
+      `  claimHash: ${envelope.evidenceBundle.committedClaimHash}\n` +
+      (wantFull
+        ? '  (self-contained — includes the screenplay text)\n'
+        : '  (proof-only — no screenplay text; safe to share)\n'),
+  )
+}
+
+interface UnpackOptions {
+  bundlePath: string
+  outDir?: string
+}
+
+/**
+ * Open a `.screenreg`: verify it (the read path folds in each entry's SHA-256), report what it
+ * contains, and optionally extract the files. Exits non-zero if integrity fails.
+ */
+async function cmdUnpack(opts: UnpackOptions): Promise<void> {
+  const bytes = readBytesOrDie(opts.bundlePath, 'unpack: cannot read')
+  let parsed: Awaited<ReturnType<typeof readScreenreg>>
+  try {
+    parsed = await readScreenreg(bytes)
+  } catch (err) {
+    die(`unpack: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Validate the embedded envelope before dereferencing it: a digest-valid bundle can still carry
+  // a malformed envelope, and that must surface as a clear error, not a raw property-access crash.
+  const ev = validateEnvelope(parsed.envelope)
+  if (!ev.ok) {
+    die(`unpack: ${opts.bundlePath} contains an invalid envelope:\n  - ${ev.errors.join('\n  - ')}`)
+  }
+
+  const d = parsed.descriptor
+  process.stderr.write(
+    `${opts.bundlePath}: ${d.bundleType} bundle\n` +
+      `  claimHash: ${parsed.envelope.evidenceBundle.committedClaimHash}\n` +
+      `  contents:  ${d.entries.map((e) => e.path).join(', ')}\n` +
+      `  integrity: ${parsed.integrity.ok ? 'OK — all declared digests match' : 'FAILED'}\n`,
+  )
+
+  // Integrity gates extraction: never write files out of a bundle whose declared digests do not
+  // match. Report the failures and stop before touching the filesystem.
+  if (!parsed.integrity.ok) {
+    for (const issue of parsed.integrity.issues) process.stderr.write(`    ✗ ${issue}\n`)
+    process.exit(1)
+  }
+
+  if (opts.outDir !== undefined) {
+    // Extract ONLY the descriptor-declared (hence digest-verified) entries, plus the descriptor
+    // itself — never arbitrary physical ZIP members. This blocks a hostile bundle that appends an
+    // undeclared "../envelope.json" which basename-flattening would otherwise map onto a real file.
+    const map = new Map<string, Uint8Array>()
+    for (const e of unzipStore(bytes)) map.set(e.name, e.bytes)
+    const declaredPaths = [ENTRY_DESCRIPTOR, ...d.entries.map((e) => e.path)]
+
+    // Preflight: resolve safe basenames and detect unsafe names / collisions BEFORE creating the
+    // directory or writing anything, so a malformed bundle never leaves a partial extraction.
+    const toWrite = new Map<string, Uint8Array>() // basename → bytes
+    for (const path of declaredPaths) {
+      const data = map.get(path)
+      if (!data) continue // declared entries were proven present by readScreenreg; defensive
+      // Flatten to the basename to neutralize any "../" traversal in a crafted name.
+      const safe = basename(path)
+      if (!safe || safe === '.' || safe === '..') {
+        die(`unpack: refusing to extract an entry with an unsafe name (${JSON.stringify(path)})`)
+      }
+      if (toWrite.has(safe)) {
+        die(`unpack: refusing to extract — two entries collide on the name "${safe}"`)
+      }
+      toWrite.set(safe, data)
+    }
+
+    try {
+      mkdirSync(opts.outDir, { recursive: true })
+    } catch (err) {
+      die(`unpack: cannot create ${opts.outDir}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    for (const [safe, data] of toWrite) writeFileSync(join(opts.outDir, safe), data)
+    process.stderr.write(`✓ extracted ${toWrite.size} file${toWrite.size === 1 ? '' : 's'} → ${opts.outDir}/\n`)
   }
 }
 
@@ -2366,6 +2590,68 @@ async function main(): Promise<void> {
         stripPageNumbers,
         stripSceneNumbers,
       })
+      return
+    }
+    case 'pack': {
+      const positional: string[] = []
+      let sourcePath: string | undefined
+      let otsPath: string | undefined
+      let outPath: string | undefined
+      let evidence = false
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--source' || a === '-s') {
+          if (rest[i + 1] === undefined) die('--source requires an argument')
+          sourcePath = rest[++i]
+        } else if (a === '--ots') {
+          if (rest[i + 1] === undefined) die('--ots requires an argument')
+          otsPath = rest[++i]
+        } else if (a === '--out' || a === '-o') {
+          if (rest[i + 1] === undefined) die('--out requires an argument')
+          outPath = rest[++i]
+        } else if (a === '--evidence') {
+          evidence = true
+        } else if (!a.startsWith('-')) {
+          positional.push(a)
+        } else {
+          die(`pack: unexpected argument: ${a}`)
+        }
+      }
+      if (positional.length < 1) {
+        die(
+          'pack: need <envelope.manifest.json> [--source <file>] [--ots <file>] [--evidence] [--out <file.screenreg>]\n' +
+            '      --source <file>  embed the screenplay text (full bundle); omit for a proof-only bundle\n' +
+            '      --ots <file>     OpenTimestamps proof (default: the proof the envelope references)',
+        )
+      }
+      if (positional.length > 1) die('pack: too many arguments — pass one envelope path')
+      const po: PackOptions = { envelopePath: positional[0]!, evidence }
+      if (sourcePath !== undefined) po.sourcePath = sourcePath
+      if (otsPath !== undefined) po.otsPath = otsPath
+      if (outPath !== undefined) po.outPath = outPath
+      await cmdPack(po)
+      return
+    }
+    case 'unpack':
+    case 'open': {
+      const positional: string[] = []
+      let outDir: string | undefined
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!
+        if (a === '--out-dir' || a === '-d') {
+          if (rest[i + 1] === undefined) die('--out-dir requires an argument')
+          outDir = rest[++i]
+        } else if (!a.startsWith('-')) {
+          positional.push(a)
+        } else {
+          die(`${cmd}: unexpected argument: ${a}`)
+        }
+      }
+      if (positional.length < 1) die(`${cmd}: need <file.screenreg> [--out-dir <dir>]`)
+      if (positional.length > 1) die(`${cmd}: too many arguments — pass one .screenreg path`)
+      const uo: UnpackOptions = { bundlePath: positional[0]! }
+      if (outDir !== undefined) uo.outDir = outDir
+      await cmdUnpack(uo)
       return
     }
     default:
