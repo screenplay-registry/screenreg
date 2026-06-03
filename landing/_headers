@@ -8,7 +8,7 @@
   Cross-Origin-Resource-Policy: same-origin
 
 /create/*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://a.pool.opentimestamps.org https://alice.btc.calendar.opentimestamps.org https://bob.btc.calendar.opentimestamps.org https://finney.calendar.eternitywall.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://a.pool.opentimestamps.org https://alice.btc.calendar.opentimestamps.org https://bob.btc.calendar.opentimestamps.org https://finney.calendar.eternitywall.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests
 
 /verify/*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests

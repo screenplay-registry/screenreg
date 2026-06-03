@@ -10,11 +10,6 @@ import { normalize, contentHashOfNormalized, PROFILE_ID as NORM_PROFILE_ID } fro
 import { buildCommittedClaim, buildEnvelope } from './lib/envelope/build.js'
 import { computeClaimHash, computeClaimHashBytes } from './lib/envelope/claim-hash.js'
 import { buildOtsBytes, isValidTimestampSubtree } from './lib/anchors/ots-build.js'
-import {
-  generateKeypair as identityGenerateKeypair,
-  signRegistration as identitySignRegistration,
-  exportPrivateKeyPem as identityExportPrivateKeyPem,
-} from './lib/identity/ed25519-signing.js'
 import { buildEncryptedFieldsBlock } from './lib/encrypt/fields.js'
 import { CLAIM_VERSION } from './lib/envelope/types.js'
 import { detectScenes, buildSceneTree } from './lib/merkle/scene-tree.js'
@@ -32,12 +27,22 @@ const MIN_CALENDARS_REQUIRED = 2
 const PER_CALENDAR_TIMEOUT_MS = 15_000
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024
+// A source PDF is larger than the text it yields (fonts, layout, images). Cap the PDF we will
+// parse to bound pdf.js memory; the EXTRACTED TEXT is still subject to MAX_FILE_BYTES in run().
+const MAX_PDF_BYTES = 30 * 1024 * 1024
+// Page cap bounds extraction wall-clock on a pathological PDF (a feature script is ~90–200 pages).
+const MAX_PDF_PAGES = 3000
 
 const els = {
   drop: document.getElementById('dropZone'),
   fileInput: document.getElementById('fileInput'),
   fileName: document.getElementById('fileName'),
   computeBtn: document.getElementById('computeBtn'),
+  inputArea: document.getElementById('inputArea'),
+  topBar: document.getElementById('topBar'),
+  topBarFill: document.getElementById('topBarFill'),
+  startOver: document.getElementById('startOver'),
+  ghostTimer: document.getElementById('ghostTimer'),
   stepsRoot: document.getElementById('stepsRoot'),
   calendarList: document.getElementById('calendarList'),
   downloads: document.getElementById('downloads'),
@@ -47,10 +52,7 @@ const els = {
   downloadEvidence: document.getElementById('downloadEvidence'),
   downloadManifest: document.getElementById('downloadManifest'),
   downloadProof: document.getElementById('downloadProof'),
-  downloadIdentityKey: document.getElementById('downloadIdentityKey'),
-  optIdentity: document.getElementById('optIdentity'),
   optEncrypt: document.getElementById('optEncrypt'),
-  optSceneTree: document.getElementById('optSceneTree'),
   encryptInputs: document.getElementById('encryptInputs'),
   encTitle: document.getElementById('encTitle'),
   encAuthor: document.getElementById('encAuthor'),
@@ -69,13 +71,57 @@ const els = {
 }
 
 let selectedFile = null
+// When a PDF is extracted + the writer confirms the text, this holds the bytes to register
+// (the reviewed/edited text), so run() uses it instead of reading selectedFile.
+let extractedSource = null
+let pdfjsLib = null
+// Bumped on every new selection. A long-running async PDF extraction captures the token at start
+// and aborts all UI/state writes if it no longer matches — so a superseded PDF can't overwrite a
+// newer selection or become the registered source.
+let selectionToken = 0
 let lastObjectUrls = []
 // Finalize ghost-loader state. `activeFinalize` is the proof currently shown in
 // the card; `pollTimer` is its background re-check timer (cleared on reset).
 let activeFinalize = null
 let pollTimer = null
+// Settling-timer state: when the proof was created (for elapsed), when the next auto-check fires
+// (for the countdown), and the 1s tick interval.
+let ghostTimerInterval = null
+let ghostStartMs = 0
+let ghostNextCheckMs = 0
 const PENDING_STORE_KEY = 'screenreg.pending.v1'
 const POLL_INTERVAL_MS = 60_000
+
+function fmtDuration(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${sec}s` : `${sec}s`
+}
+function startGhostTimer(createdAtIso) {
+  const parsed = createdAtIso ? Date.parse(createdAtIso) : NaN
+  ghostStartMs = Number.isFinite(parsed) ? parsed : Date.now()
+  els.ghostTimer.hidden = false
+  tickGhostTimer()
+  if (ghostTimerInterval) clearInterval(ghostTimerInterval)
+  ghostTimerInterval = setInterval(tickGhostTimer, 1000)
+}
+function stopGhostTimer() {
+  if (ghostTimerInterval) {
+    clearInterval(ghostTimerInterval)
+    ghostTimerInterval = null
+  }
+  if (els.ghostTimer) els.ghostTimer.hidden = true
+}
+function tickGhostTimer() {
+  const elapsed = Date.now() - ghostStartMs
+  const nextIn = ghostNextCheckMs ? Math.max(0, ghostNextCheckMs - Date.now()) : 0
+  // All interpolated values are numbers/our own strings — safe for innerHTML.
+  els.ghostTimer.innerHTML =
+    `<span class="big">Elapsed: ${fmtDuration(elapsed)}</span> · usually confirms within 1–6 hours` +
+    (nextIn > 0 ? ` · next check in ${Math.ceil(nextIn / 1000)}s` : ' · checking…')
+}
 
 function revokeStaleObjectUrls() {
   for (const u of lastObjectUrls) URL.revokeObjectURL(u)
@@ -93,6 +139,20 @@ function setStep(stepId, state, detail) {
     if (state === 'err') detailEl.classList.add('err')
     detailEl.textContent = detail
   }
+  // Advance the fixed top progress bar as steps move through the pipeline.
+  const i = STEP_ORDER.indexOf(stepId)
+  if (i >= 0) {
+    if (state === 'err') els.topBar.classList.add('err')
+    else if (state === 'done') setTopBar(((i + 1) / STEP_ORDER.length) * 100)
+    else if (state === 'active') setTopBar((i / STEP_ORDER.length) * 100)
+  }
+}
+
+const STEP_ORDER = ['normalize', 'content-hash', 'claim', 'claim-hash', 'calendars', 'ots', 'bundle']
+
+function setTopBar(pct) {
+  els.topBar.classList.add('on')
+  els.topBarFill.style.width = Math.max(0, Math.min(100, pct)) + '%'
 }
 
 function setCalendarRow(url, badge, label, reason) {
@@ -175,20 +235,40 @@ async function run() {
   // Snapshot the file at run-start so a second selection in the middle of the
   // async pipeline (drop, file-input change) cannot mint a proof that points
   // at the wrong filename in the manifest's proofRef / download names.
+  // The source is either a dropped text file, or the reviewed text extracted from a dropped PDF.
   const fileForThisRun = selectedFile
-  if (!fileForThisRun) return
+  const extractedForThisRun = extractedSource && extractedSource.bytes ? extractedSource : null
+  if (!fileForThisRun && !extractedForThisRun) return
+  // Web Crypto (SHA-256) is only exposed in a secure context — HTTPS, or http://localhost. On an
+  // insecure origin `crypto.subtle` is undefined; fail fast with a clear reason instead of a
+  // cryptic "Cannot read properties of undefined (reading 'digest')" mid-pipeline.
+  if (!globalThis.crypto || !globalThis.crypto.subtle) {
+    els.stepsRoot.hidden = false
+    setStep(
+      'normalize',
+      'err',
+      'A secure (HTTPS) connection is required to create a proof in your browser. Please reload over HTTPS.',
+    )
+    return
+  }
+  const sourceName = extractedForThisRun ? extractedForThisRun.name : fileForThisRun.name
   els.computeBtn.disabled = true
   els.drop.style.pointerEvents = 'none'
   els.fileInput.disabled = true
+  // Dynamic run UI: the input form gives way to the progress view + a top progress bar.
+  els.inputArea.hidden = true
+  els.startOver.hidden = false
+  els.topBar.classList.remove('err')
+  setTopBar(4)
   els.stepsRoot.hidden = false
   els.downloads.hidden = true
   els.calendarList.innerHTML = ''
   revokeStaleObjectUrls()
 
   try {
-    // Step 1 — normalize (file.size guard was applied at onFile; this is the byte read)
+    // Step 1 — normalize (size guard was applied at onFile; this is the byte read)
     setStep('normalize', 'active', 'reading bytes…')
-    const inputBytes = await readFileBytes(fileForThisRun)
+    const inputBytes = extractedForThisRun ? extractedForThisRun.bytes : await readFileBytes(fileForThisRun)
     if (inputBytes.length === 0) throw new Error('file is empty (0 bytes)')
     if (inputBytes.length > MAX_FILE_BYTES) {
       throw new Error(`file is too large (${inputBytes.length} bytes > ${MAX_FILE_BYTES} max)`)
@@ -211,26 +291,21 @@ async function run() {
     // are processed (sceneCount=N, sceneTree=skipped, encryptedFields=...,
     // registrant=ed25519). Surfaced verbatim in the "claim" step's done line.
     const claimAnnotations = []
-    // Scene-tree Merkle root (Section 03). Commits per-scene leaf hashes
-    // without revealing scene contents; later enables selective scene
-    // disclosure proofs.
-    if (els.optSceneTree.checked) {
+    // Scene-tree Merkle root (Section 03) — always built on the website. Commits per-scene leaf
+    // hashes without revealing scene contents; later enables selective scene-disclosure proofs.
+    {
       setStep('claim', 'active', 'detecting scenes + building Merkle tree…')
       const scenes = detectScenes(norm.normalized)
       if (scenes.length > 0) {
         const tree = await buildSceneTree(scenes)
         claimInput.sceneTree = { root: tree.root, count: tree.sceneCount }
       } else {
-        // Zero scenes detected (preamble-only or non-screenplay text). The
-        // claim omits sceneTree entirely so its absence is commitment-bearing
-        // per spec §3.5. Surface this to the writer so they understand the
-        // option they enabled was effectively a no-op for this input.
+        // Zero scenes detected (preamble-only or non-screenplay text). The claim omits sceneTree
+        // entirely, so its absence is itself commitment-bearing per spec §3.5.
         claimAnnotations.push('sceneTree=skipped (no INT./EXT./EST. headings detected)')
       }
     }
-    // Encrypted-fields block is built BEFORE the registrant signature so the
-    // signature commits to the (ciphertext, IV, tag) bytes too — tampering
-    // with any of those after registration would invalidate the signature.
+    // "Keep the title and author private" — optional encrypted fields (AES-256-GCM).
     if (els.optEncrypt.checked) {
       const fields = {}
       if (els.encTitle.value.trim() !== '') fields.title = els.encTitle.value
@@ -251,19 +326,11 @@ async function run() {
         fields,
       })
     }
-    let claim = buildCommittedClaim(claimInput)
-    let identityPemForDownload = null
-    if (els.optIdentity.checked) {
-      setStep('claim', 'active', 'generating Ed25519 keypair…')
-      const kp = await identityGenerateKeypair()
-      setStep('claim', 'active', 'signing claim body…')
-      const registrant = await identitySignRegistration(claim, kp.privateKey, kp.publicKeyEncoded)
-      claim = { ...claim, registrant }
-      identityPemForDownload = await identityExportPrivateKeyPem(kp.privateKey)
-    }
+    // Identity signing (Ed25519) is a CLI-only feature: it produces a private key, and burying a
+    // key in a browser-downloaded file is a footgun for the mass audience. The browser never signs.
+    const claim = buildCommittedClaim(claimInput)
     if (claimInput.sceneTree) claimAnnotations.push(`sceneCount=${claimInput.sceneTree.count}`)
-    if (els.optEncrypt.checked) claimAnnotations.push('encryptedFields=aes-256-gcm')
-    if (els.optIdentity.checked) claimAnnotations.push('registrant=ed25519')
+    if (els.optEncrypt.checked) claimAnnotations.push('title/author kept private (aes-256-gcm)')
     setStep(
       'claim',
       'done',
@@ -275,6 +342,15 @@ async function run() {
     const claimHash = await computeClaimHash(claim)
     const claimHashBytes = await computeClaimHashBytes(claim)
     setStep('claim-hash', 'done', claimHash)
+
+    // Outward-facing naming. When "keep title & author private" is on, EVERYTHING a recipient
+    // could see is derived from a neutral claimHash serial, never the (possibly title-bearing)
+    // filename: the envelope's proofRef, the loose manifest/proof download names, the shareable
+    // bundle name, and the resume label. The full keep-safe bundle is the writer's private copy
+    // and keeps the real name. (claimHash is final here — the claim never changes after this.)
+    const keepPrivate = els.optEncrypt.checked
+    const shareSerial = 'screenreg-' + claimHash.replace(/^sha256:/, '').slice(0, 12)
+    const outName = keepPrivate ? shareSerial : sourceName
 
     // Step 5 — submit to calendars
     setStep('calendars', 'active', `submitting to ${CALENDARS.length} calendars in parallel (${PER_CALENDAR_TIMEOUT_MS / 1000}s timeout each)…`)
@@ -322,7 +398,7 @@ async function run() {
         {
           type: 'opentimestamps',
           claimHash,
-          proofRef: deriveProofRef(fileForThisRun.name),
+          proofRef: deriveProofRef(outName),
           submittedAt: new Date().toISOString(),
         },
       ],
@@ -338,20 +414,9 @@ async function run() {
     const otsUrl = URL.createObjectURL(otsBlob)
     lastObjectUrls.push(manifestUrl, otsUrl)
     els.downloadManifest.href = manifestUrl
-    els.downloadManifest.download = deriveManifestName(fileForThisRun.name)
+    els.downloadManifest.download = deriveManifestName(outName)
     els.downloadProof.href = otsUrl
-    els.downloadProof.download = deriveProofName(fileForThisRun.name)
-    if (identityPemForDownload !== null) {
-      const pemBlob = new Blob([identityPemForDownload], { type: 'application/x-pem-file' })
-      const pemUrl = URL.createObjectURL(pemBlob)
-      lastObjectUrls.push(pemUrl)
-      els.downloadIdentityKey.href = pemUrl
-      els.downloadIdentityKey.download = deriveIdentityKeyName(fileForThisRun.name)
-      els.downloadIdentityKey.hidden = false
-    } else {
-      els.downloadIdentityKey.hidden = true
-      els.downloadIdentityKey.removeAttribute('href')
-    }
+    els.downloadProof.download = deriveProofName(outName)
 
     // The single-file .screenreg is the primary artifact: a full bundle that embeds the
     // screenplay (self-contained verification) and an evidence bundle that omits it (shareable
@@ -366,11 +431,13 @@ async function run() {
       const bundleUrl = URL.createObjectURL(new Blob([fullBundle], { type: 'application/zip' }))
       const evidenceUrl = URL.createObjectURL(new Blob([evidenceBundleBytes], { type: 'application/zip' }))
       lastObjectUrls.push(bundleUrl, evidenceUrl)
+      // The full keep-safe bundle (writer's private copy) keeps the real name; the shareable
+      // evidence bundle uses the neutral serial when keep-private is on (outName).
       els.downloadBundle.href = bundleUrl
-      els.downloadBundle.download = deriveBundleName(fileForThisRun.name)
+      els.downloadBundle.download = deriveBundleName(sourceName)
       els.downloadBundle.hidden = false
       els.downloadEvidence.href = evidenceUrl
-      els.downloadEvidence.download = deriveEvidenceName(fileForThisRun.name)
+      els.downloadEvidence.download = deriveEvidenceName(outName)
       els.downloadEvidence.hidden = false
       setStep('bundle', 'done', `${fullBundle.length} B full · ${evidenceBundleBytes.length} B shareable`)
     } catch (e) {
@@ -393,13 +460,16 @@ async function run() {
     // convenience layer over the two files just downloaded — if anything here
     // throws, the proof is already safely in hand.
     try {
-      const title = fileForThisRun.name
-      const token = encodePendingHandle({ v: 1, claimHash, ots: otsBytes, title, createdAt: new Date().toISOString() })
+      // The label rides in the resume token + the on-page dashboard, and the "copy a link" link is
+      // shareable — so it uses outName (the neutral serial when keep-private is on).
+      const title = outName
+      const createdAt = new Date().toISOString()
+      const token = encodePendingHandle({ v: 1, claimHash, ots: otsBytes, title, createdAt })
       setResumeHash(token)
       upsertPendingRecord({ claimHash, title, token, status: 'pending' })
       // Pass the envelope + source through (active run only — never in the resume token, which
       // stays small and script-free) so the confirmed download can be a finalized .screenreg.
-      showGhostPending(otsBytes, claimHash, title, true, { envelope, sourceBytes: inputBytes })
+      showGhostPending(otsBytes, claimHash, title, true, { envelope, sourceBytes: inputBytes }, createdAt)
     } catch (e) {
       console.error('[create] ghost-loader setup failed (non-fatal)', e)
     }
@@ -448,9 +518,6 @@ function deriveManifestName(filename) {
 }
 function deriveProofName(filename) {
   return filename.replace(/\.(fountain|txt)$/i, '') + '.proof.ots'
-}
-function deriveIdentityKeyName(filename) {
-  return filename.replace(/\.(fountain|txt)$/i, '') + '.identity.pem'
 }
 function deriveProofRef(filename) {
   return deriveProofName(filename)
@@ -537,11 +604,12 @@ function setResumeHash(token) {
 // resumed from a #p= link we have NOT yet parsed it, so we show a neutral
 // "checking" headline and let the first finalize check prove it's real (or
 // surface an error) — never claim "valid now" for an unverified token.
-function showGhostPending(otsBytes, claimHash, title, knownValid, extras) {
+function showGhostPending(otsBytes, claimHash, title, knownValid, extras, createdAt) {
   // `extras` ({ envelope, sourceBytes }) is present only for a proof built in THIS tab, enabling
   // a finalized .screenreg on confirmation. A resumed proof (from a #p= link) has neither, so its
   // confirmed download falls back to the upgraded .ots.
   activeFinalize = { otsBytes, claimHash, title, extras: extras || null }
+  startGhostTimer(createdAt)
   els.ghostCard.classList.remove('confirmed', 'error')
   if (knownValid) {
     setPendingValidCopy()
@@ -569,6 +637,7 @@ function setPendingValidCopy() {
 
 function showGhostError(message) {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+  stopGhostTimer()
   activeFinalize = null
   els.ghostCard.classList.remove('confirmed')
   els.ghostCard.classList.add('error')
@@ -582,6 +651,7 @@ function showGhostError(message) {
 
 function scheduleFinalizeCheck(delayMs) {
   if (pollTimer) clearTimeout(pollTimer)
+  ghostNextCheckMs = Date.now() + delayMs // drives the "next check in Ns" countdown
   pollTimer = setTimeout(runFinalizeCheck, delayMs)
 }
 
@@ -649,6 +719,7 @@ async function showGhostConfirmed(upgradedOts, heights, title, extras, expectedC
   // confirmation (or publish a download) over a different proof.
   if (!activeFinalize || activeFinalize.claimHash !== expectedClaimHash) return
 
+  stopGhostTimer()
   els.ghostCard.classList.add('confirmed')
   els.ghostHeadline.textContent = '✓ Confirmed on Bitcoin'
   els.ghostCheck.hidden = true
@@ -676,7 +747,7 @@ function resumeFromHash() {
   } catch {
     return // not a valid resume token — ignore
   }
-  showGhostPending(handle.ots, handle.claimHash, handle.title || '', false) // resumed → prove it before claiming valid
+  showGhostPending(handle.ots, handle.claimHash, handle.title || '', false, undefined, handle.createdAt) // resumed → prove it before claiming valid
 }
 
 els.ghostCheck.addEventListener('click', () => {
@@ -728,6 +799,10 @@ els.fileInput.addEventListener('change', (e) => {
   const f = e.target.files && e.target.files[0]
   if (f) onFile(f)
 })
+els.startOver.addEventListener('click', () => {
+  resetSelectionState()
+  els.fileName.textContent = ''
+})
 
 function resetSelectionState() {
   // Centralized state cleanup. Called on every new file selection (success
@@ -735,37 +810,31 @@ function resetSelectionState() {
   // downloads, prior compute steps, and prior Blob URLs never survive a new
   // selection.
   selectedFile = null
+  extractedSource = null
+  selectionToken++ // invalidate any in-flight PDF extraction from a prior selection
   els.computeBtn.disabled = true
   els.stepsRoot.hidden = true
   els.downloads.hidden = true
   els.calendarList.innerHTML = ''
+  // Restore the input form + reset the dynamic run UI.
+  els.inputArea.hidden = false
+  els.startOver.hidden = true
+  els.topBar.classList.remove('on', 'err')
+  els.topBarFill.style.width = '0%'
   // Tear down any prior ghost-loader so a fresh registration starts clean. The
   // local "pending proofs" dashboard persists; only the active card is cleared.
   els.ghost.hidden = true
   activeFinalize = null
+  stopGhostTimer()
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
   revokeStaleObjectUrls()
 }
 
 function onFile(f) {
-  // PDF detection — reject in the browser, surface the CLI path. Doing the
-  // detection at file-select time (not after FileReader runs) avoids loading
-  // potentially large PDFs into memory before refusing them. v1-strict's
-  // UTF-8 validator would reject the bytes anyway, but the error message
-  // "Invalid UTF-8 byte sequence detected at offset 0" wouldn't tell the
-  // writer to use the CLI.
+  // A PDF is routed to in-browser extraction (handlePdf) instead of the text path: it is read by
+  // pdf.js into text the writer reviews, and that text — not the PDF bytes — is what gets hashed.
   if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
-    // shellQuote escapes filenames containing whitespace, quotes, or
-    // metacharacters so the displayed command is safe to copy-paste.
-    const quotedIn = shellQuote(f.name)
-    const quotedOut = shellQuote(deriveBaseName(f.name) + '.fountain')
-    els.fileName.innerHTML =
-      `<strong>${escapeText(f.name)}</strong> is a PDF.<br>` +
-      `In-browser PDF extraction is coming soon. For now, extract it with the CLI:<br>` +
-      `<code style="display:block;margin:8px 0;padding:8px 12px;background:var(--code-bg);font-size:13px;">` +
-      `screenreg extract ${escapeText(quotedIn)} &gt; ${escapeText(quotedOut)}` +
-      `</code>` +
-      `Then drop the resulting <span class="mono">.fountain</span> file here.`
+    handlePdf(f)
     return
   }
   // Pre-flight size check BEFORE allowing FileReader to read multi-GB inputs.
@@ -782,6 +851,116 @@ function onFile(f) {
   const extNote = looksFountain ? '' : ' · note: not a .fountain extension'
   selectedFile = f
   els.fileName.textContent = `${f.name} · ${f.size.toLocaleString()} bytes${extNote}`
+  els.computeBtn.disabled = false
+}
+
+// ---- PDF extraction (pdf.js, lazy-loaded from our own origin only when a PDF is dropped) ----
+// pdf.js is an INPUT TOOL: it turns a PDF into text. The extracted text — reviewed and editable
+// by the writer below — is what gets normalized, hashed, and embedded in the .screenreg. The
+// parser is never part of verification, so it can be swapped (for our own, later) with no effect
+// on any existing proof.
+
+async function loadPdfjs() {
+  if (pdfjsLib) return pdfjsLib
+  const lib = await import('./lib/pdfjs/pdf.min.mjs')
+  lib.GlobalWorkerOptions.workerSrc = new URL('./lib/pdfjs/pdf.worker.min.mjs', import.meta.url).href
+  pdfjsLib = lib
+  return lib
+}
+
+async function extractPdfText(bytes, isCancelled) {
+  const pdfjs = await loadPdfjs()
+  // pdf.js detaches the ArrayBuffer it is handed; pass a copy so the caller's bytes survive.
+  const data = bytes.slice()
+  const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false, useSystemFonts: false })
+  const doc = await loadingTask.promise
+  const pages = doc.numPages
+  if (pages > MAX_PDF_PAGES) {
+    await doc.destroy()
+    throw new Error(`the PDF has ${pages.toLocaleString()} pages (max ${MAX_PDF_PAGES.toLocaleString()})`)
+  }
+  // Collect chunks (not repeated string concat) and track length so a pathological PDF that would
+  // expand into huge text is aborted mid-extraction, before it can freeze or balloon the tab. The
+  // char-count cap is a generous proxy that bounds memory; useExtractedText() does the exact byte check.
+  const chunks = []
+  let len = 0
+  let items = 0
+  try {
+    for (let p = 1; p <= pages; p++) {
+      // Stop promptly (and free the parser) if a newer selection superseded this extraction, so a
+      // hostile/huge PDF can't keep parsing in the background.
+      if (isCancelled && isCancelled()) throw new Error('superseded')
+      const page = await doc.getPage(p)
+      const tc = await page.getTextContent()
+      for (const it of tc.items) {
+        if (typeof it.str !== 'string') continue
+        chunks.push(it.str)
+        len += it.str.length
+        if (it.hasEOL) {
+          chunks.push('\n') // pdf.js marks line ends; trust them for line reconstruction
+          len += 1
+        }
+        items++
+        if (len > MAX_FILE_BYTES) {
+          throw new Error(`the extracted text exceeds the ${MAX_FILE_BYTES.toLocaleString()}-byte limit`)
+        }
+      }
+      chunks.push('\n') // page break
+      len += 1
+      page.cleanup()
+    }
+  } finally {
+    await doc.destroy()
+  }
+  const text = chunks.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '') + '\n'
+  return { text, items, pages }
+}
+
+async function handlePdf(f) {
+  const myToken = selectionToken // abort if a newer selection supersedes this one mid-extraction
+  if (f.size === 0) {
+    els.fileName.textContent = `${f.name} · empty file (0 bytes) — choose a non-empty PDF.`
+    return
+  }
+  if (f.size > MAX_PDF_BYTES) {
+    els.fileName.textContent = `${f.name} · ${f.size.toLocaleString()} bytes exceeds the ${MAX_PDF_BYTES.toLocaleString()} byte PDF limit.`
+    return
+  }
+  els.fileName.innerHTML = `<strong>${escapeText(f.name)}</strong> · reading the PDF in your browser…`
+  let result
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer())
+    if (myToken !== selectionToken) return // superseded by a newer selection
+    result = await extractPdfText(bytes, () => myToken !== selectionToken)
+  } catch (e) {
+    if (myToken !== selectionToken) return
+    els.fileName.innerHTML =
+      `<strong>${escapeText(f.name)}</strong> · could not read this PDF (${escapeText(e && e.message ? e.message : String(e))}).<br>` +
+      `If it is a scanned or image-only PDF, there is no text to extract — paste the screenplay as plain text instead.`
+    return
+  }
+  if (myToken !== selectionToken) return // superseded while extracting
+  if (!result.text || result.text.trim().length === 0 || result.items === 0) {
+    els.fileName.innerHTML =
+      `<strong>${escapeText(f.name)}</strong> · no selectable text found — this looks like a scanned or image-only PDF.<br>` +
+      `Use a text-based PDF, or paste the screenplay as plain text.`
+    return
+  }
+  useExtractedText(f.name, result)
+}
+
+// No review textarea — the extracted text is committed as-is and goes straight to ready-to-
+// register. (The full .screenreg embeds the exact text, so the writer can always inspect what was
+// fingerprinted later; a per-page proofread of a feature script up front is not actionable.)
+function useExtractedText(name, result) {
+  const bytes = new TextEncoder().encode(result.text)
+  if (bytes.length > MAX_FILE_BYTES) {
+    els.fileName.innerHTML = `<strong>${escapeText(name)}</strong> · the extracted text is ${bytes.length.toLocaleString()} bytes, over the ${MAX_FILE_BYTES.toLocaleString()} byte limit.`
+    return
+  }
+  extractedSource = { name: deriveBaseName(name) + '.fountain', bytes }
+  selectedFile = null
+  els.fileName.innerHTML = `<strong>${escapeText(name)}</strong> · extracted ${result.pages} page${result.pages === 1 ? '' : 's'} (${bytes.length.toLocaleString()} bytes) — ready to register.`
   els.computeBtn.disabled = false
 }
 

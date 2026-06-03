@@ -136,6 +136,22 @@
   }
   .drop input[type=file] { display: none; }
 
+  /* Dynamic run UI: a thin fixed top progress bar + the input form hides while a proof runs. */
+  #topBar {
+    position: fixed; top: 0; left: 0; right: 0; height: 3px;
+    z-index: 100; opacity: 0; transition: opacity 200ms;
+    pointer-events: none;
+  }
+  #topBar.on { opacity: 1; }
+  #topBarFill { height: 100%; width: 0; background: var(--accent); transition: width 350ms ease; }
+  #topBar.err #topBarFill { background: #8a1a10; }
+  .start-over {
+    margin: 20px 0 0;
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+    background: none; border: none; color: var(--accent); cursor: pointer; padding: 0;
+  }
+  .start-over:hover { text-decoration: underline; }
+
   .privacy-note {
     font-size: 14px;
     color: var(--muted);
@@ -331,6 +347,8 @@
   .ghost-card.confirmed .ghost-dot { background: var(--ok); animation: none; }
   @keyframes ghost-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
   .ghost-detail { margin: 12px 0 0; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; }
+  .ghost-timer { margin: 12px 0 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .ghost-timer .big { color: var(--ink); font-size: 15px; }
   .ghost-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
   .ghost-btn {
     font-family: ui-monospace, Menlo, monospace; font-size: 13px;
@@ -381,52 +399,37 @@
   </div>
 </header>
 
+<div id="topBar"><div id="topBarFill"></div></div>
+
 <main>
   <h1>Create a private, dated proof that your screenplay <em>existed today.</em></h1>
+
+  <div id="inputArea">
   <p class="lede">
-    Drop your <span class="mono">.fountain</span> file below. Your computer hashes it locally, and only the 32-byte fingerprint is sent to public Bitcoin-timestamping calendars. The script content never leaves your browser.
+    Drop your screenplay below — a <span class="mono">.pdf</span>, <span class="mono">.fountain</span>, or plain text. Your computer reads and hashes it locally, and only the 32-byte fingerprint is sent to public Bitcoin-timestamping calendars. The script content never leaves your browser.
   </p>
 
   <label class="drop" id="dropZone">
-    <p>Drag a <span class="mono">.fountain</span> file here, or click to choose.</p>
-    <p class="hint">Fountain or plain text, up to 8 MB. Got a PDF? Extract it with the CLI for now — in-browser PDF is coming soon.</p>
+    <p>Drag a <span class="mono">.pdf</span>, <span class="mono">.fountain</span>, or text file here, or click to choose.</p>
+    <p class="hint">PDF, Fountain, or plain text. A PDF is converted to text right here in your browser — nothing is uploaded.</p>
     <p class="file-name" id="fileName"></p>
     <input type="file" id="fileInput" accept=".fountain,.txt,text/plain,.pdf,application/pdf" />
   </label>
 
   <p class="privacy-note">
-    <strong>Privacy.</strong> Hashing runs entirely in this tab. A 32-byte SHA-256 of the canonical bytes is the only data that leaves your machine, and it goes only to the OpenTimestamps public calendars listed below — the same destinations the <span class="mono">screenreg</span> CLI uses.
+    <strong>Privacy.</strong> Hashing runs entirely in this tab. The 32-byte SHA-256 fingerprint is the only thing about your screenplay that ever leaves your machine, and it goes only to the OpenTimestamps public calendars listed below. While the proof settles, this page periodically re-asks those same calendars whether Bitcoin has confirmed it yet — the same destinations and the same fingerprint, nothing more. Your script, title, and author never leave (the title and author go out only as ciphertext, and only if you choose to embed them).
   </p>
 
   <div class="options" style="margin: 28px 0 12px;">
     <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer;">
-      <input type="checkbox" id="optIdentity" style="margin-top: 4px;" />
-      <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Sign it with your own key (Ed25519).</strong>
-        Generates a one-time signing key, embeds the public half in your proof,
-        and hands you the private half as a <span class="mono">.pem</span> file to
-        download. Later you can prove you hold that key (challenge-response), which
-        is how you tie the registration to you. Keep the <span class="mono">.pem</span>
-        safe; lose it and you only lose that ability, not the timestamp.
-      </span>
-    </label>
-
-    <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
-      <input type="checkbox" id="optSceneTree" style="margin-top: 4px;" checked />
-      <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Build per-scene proofs (on by default).</strong>
-        Detects scene headings (<span class="mono">INT.</span> / <span class="mono">EXT.</span> / <span class="mono">EST.</span> / <span class="mono">INT/EXT.</span>) and commits a compact index of your scenes. Later you can prove that a single scene (say, "scene 47") was in your registered draft without revealing the rest. Adds a few milliseconds.
-      </span>
-    </label>
-
-    <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 15px; cursor: pointer; margin-top: 14px;">
       <input type="checkbox" id="optEncrypt" style="margin-top: 4px;" />
       <span>
-        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Encrypt the title and author.</strong>
+        <strong style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">Keep the title and author private.</strong>
         Locks your title and author name with a password before they go into the
         proof, so the proof commits to them without exposing them. The plaintext
         never leaves your machine; anyone with the password can decrypt, anyone
-        without sees only ciphertext (AES-256-GCM, PBKDF2 600,000 iterations).
+        without sees only ciphertext (AES-256-GCM, PBKDF2 600,000 iterations). The
+        shareable proof file is then named by a neutral serial, not your title.
       </span>
     </label>
 
@@ -445,6 +448,9 @@
   <button class="compute-btn" id="computeBtn" disabled>
     <span class="arrow">→</span> Create the proof
   </button>
+  </div><!-- /#inputArea -->
+
+  <button type="button" class="start-over" id="startOver" hidden>← Start over / register another</button>
 
   <section class="steps" id="stepsRoot" hidden>
     <h2>Progress</h2>
@@ -472,9 +478,8 @@
       <div class="links">
         <a class="download-btn" id="downloadManifest"><span>→</span> manifest.json</a>
         <a class="download-btn" id="downloadProof"><span>→</span> proof.ots</a>
-        <a class="download-btn" id="downloadIdentityKey" hidden><span>→</span> identity.pem</a>
       </div>
-      <p class="note">The same envelope and timestamp, unbundled. Your identity key (<span class="mono">.pem</span>), if you signed, is a private key — it is never placed inside a <span class="mono">.screenreg</span>.</p>
+      <p class="note">The same envelope and timestamp, unbundled.</p>
     </details>
   </section>
 
@@ -487,6 +492,7 @@
       <p class="ghost-detail" id="ghostDetail">
         Your proof is valid now as a pending calendar attestation. The Bitcoin confirmation usually lands within 1–6 hours — you can safely close this tab.
       </p>
+      <div class="ghost-timer" id="ghostTimer" hidden></div>
       <div class="ghost-actions">
         <button class="ghost-btn" id="ghostCheck" type="button">Check now</button>
         <a class="download-btn" id="downloadFinal" hidden><span>→</span> download confirmed proof</a>

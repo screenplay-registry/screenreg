@@ -18,10 +18,11 @@ What's deployed:
 
 ### What `build:landing` does
 
-`npm run build:landing` runs two steps from the repo root:
+`npm run build:landing` runs three steps from the repo root:
 
 - `build:browser` — compiles `src/shared/` to `landing/create/lib/` (the cross-runtime ES modules the browser register page imports).
-- `build:verify` — copies `verifier-web/index.html` and `verifier-web/verifier.js` into `landing/verify/`. `landing/verify/` is .gitignored; it is a build artifact regenerated on every deploy from `verifier-web/` (the source of truth for the read-only verifier).
+- `build:pdfjs` — vendors the pinned `pdfjs-dist` runtime (`pdf.min.mjs` + `pdf.worker.min.mjs`) into `landing/create/lib/pdfjs/`, so in-browser PDF extraction runs entirely from our own origin (no third-party CDN). Lazy-loaded on the register page only when a PDF is dropped.
+- `build:verify` — copies `verifier-web/index.html` and `verifier-web/verifier.js` into `landing/verify/`, plus the compiled `.screenreg` reader (`crypto.js` + `screenreg/`) the verifier imports to unpack a dropped bundle. `landing/verify/` is .gitignored; it is a build artifact regenerated on every deploy from `verifier-web/` (the source of truth for the read-only verifier).
 
 The published `landing/` tree contains every file Cloudflare Pages should serve. No symlinks, no sibling Pages projects, no Worker routing.
 

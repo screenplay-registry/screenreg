@@ -301,6 +301,18 @@ const verifyBtn = document.getElementById('verify-btn')
 const resultEl = document.getElementById('result')
 
 const collected = { script: null, envelope: null, ots: null }
+// Set when a dropped .screenreg's declared digests don't match its bytes (corruption, or a
+// tampered non-committed entry). The verdict still comes from the independent inline checks below;
+// this is a transparency warning, not the security boundary.
+let bundleIntegrityIssues = null
+
+// Web Crypto (SHA-256) is only available in a secure context (HTTPS). Returns a message if it is
+// unavailable, else null — so we fail clearly instead of a raw `crypto.subtle is undefined`.
+function secureContextError() {
+  return globalThis.crypto && globalThis.crypto.subtle
+    ? null
+    : 'A secure (HTTPS) connection is required to verify a proof in your browser. Please reload over HTTPS.'
+}
 
 function classify(name, bytes) {
   if (name.endsWith('.manifest.json') || name.endsWith('.json')) return 'envelope'
@@ -318,10 +330,14 @@ function fmtBytes(n) {
 async function addFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer())
   if (file.name.endsWith('.screenreg')) {
-    await addBundle(file.name, bytes)
+    await addBundle(file.name, bytes) // addBundle (re)sets bundleIntegrityIssues for the new bundle
     return
   }
   const kind = classify(file.name, bytes)
+  // The integrity warning describes the bundle that supplied the envelope. Adding a loose script
+  // alongside a (mismatched) bundle must KEEP the warning. Only a loose envelope — which REPLACES
+  // the bundle's envelope as the verified source — clears it.
+  if (kind === 'envelope') bundleIntegrityIssues = null
   collected[kind] = { name: file.name, bytes }
   render()
 }
@@ -331,6 +347,11 @@ async function addFile(file) {
 // then verified by the independent inline implementation, so a malformed/hostile bundle can only
 // fail verification, never forge a pass.
 async function addBundle(name, bytes) {
+  const sce = secureContextError()
+  if (sce) {
+    resultEl.innerHTML = `<div class="result err"><h3>✗ Secure connection required</h3>${escapeHtml(sce)}</div>`
+    return
+  }
   let parsed
   try {
     parsed = await readScreenreg(bytes)
@@ -341,10 +362,12 @@ async function addBundle(name, bytes) {
     collected.script = null
     collected.envelope = null
     collected.ots = null
+    bundleIntegrityIssues = null
     render()
     resultEl.innerHTML = `<div class="result err"><h3>✗ Could not read ${escapeHtml(name)}</h3>${escapeHtml(msg)}</div>`
     return
   }
+  bundleIntegrityIssues = parsed.integrity.ok ? null : parsed.integrity.issues
   collected.envelope = { name: `envelope.json — from ${name}`, bytes: parsed.envelopeBytes }
   if (parsed.otsBytes) collected.ots = { name: `proof.ots — from ${name}`, bytes: parsed.otsBytes }
   // A full bundle supplies the screenplay. An evidence bundle does not — and must NOT wipe a
@@ -387,6 +410,11 @@ dropZone.addEventListener('drop', async (e) => {
 })
 
 verifyBtn.addEventListener('click', async () => {
+  const sce = secureContextError()
+  if (sce) {
+    resultEl.innerHTML = `<div class="result err"><h3>✗ Secure connection required</h3>${escapeHtml(sce)}</div>`
+    return
+  }
   resultEl.innerHTML = '<div class="result"><h3>Verifying...</h3></div>'
   try {
     const result = await verifyAll()
@@ -491,9 +519,15 @@ function renderResult(r) {
     const contentsLine = r.contentsVerified
       ? `Content hash:     ${escapeHtml(r.contentHash)} ✓ matches your screenplay`
       : `Content hash:     ${escapeHtml(r.contentHash || '(none in bundle)')}\n                   NOT checked — no screenplay supplied. This proves a document with this\n                   fingerprint existed by the date below. Drop the screenplay to also confirm the contents.`
+    // A .screenreg whose declared checksums don't match its bytes still verifies here IF the
+    // envelope/proof/script are internally valid (the inline checks are authoritative). Surface
+    // the discrepancy as a transparency warning rather than failing or hiding it.
+    const integrityLine = bundleIntegrityIssues
+      ? `\n⚠ Bundle checksum mismatch — the proof above verifies independently, but the .screenreg's own manifest digests did not match: ${escapeHtml(bundleIntegrityIssues.join('; '))}`
+      : ''
     resultEl.innerHTML = `<div class="result ${cls}"><h3>${symbol} ${escapeHtml(headline)}</h3>${contentsLine}
 Claim hash:       ${escapeHtml(r.claimHash)}
-${r.sceneCount !== undefined ? `Scene count:      ${escapeHtml(String(r.sceneCount))}\n` : ''}${bitcoinLine}</div>`
+${r.sceneCount !== undefined ? `Scene count:      ${escapeHtml(String(r.sceneCount))}\n` : ''}${bitcoinLine}${integrityLine}</div>`
   } else {
     const tx = r.transforms ? '\n\nNormalization transforms applied: ' + r.transforms.map((t) => `${escapeHtml(t.kind)}(${escapeHtml(String(t.count))})`).join(', ') : ''
     resultEl.innerHTML = `<div class="result err"><h3>✗ FAILED — ${escapeHtml(r.status)}</h3>${escapeHtml(r.detail || '')}${tx}</div>`

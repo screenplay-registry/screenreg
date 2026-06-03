@@ -62,7 +62,8 @@
     "cli": "tsx src/cli/main.ts",
     "build:browser": "tsc -p tsconfig.browser.json",
     "build:verify": "node scripts/build-landing-verify.mjs",
-    "build:landing": "npm run build:browser && npm run build:verify"
+    "build:pdfjs": "node scripts/vendor-pdfjs.mjs",
+    "build:landing": "npm run build:browser && npm run build:pdfjs && npm run build:verify"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -78,6 +79,7 @@
   "dependencies": {
     "@noble/hashes": "1.8.0",
     "drand-client": "^1.4.2",
+    "pdfjs-dist": "4.10.38",
     "tlock-js": "^0.9.0"
   },
   "optionalDependencies": {
