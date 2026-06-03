@@ -514,6 +514,45 @@
   pre.block .k { color: var(--accent); }
   pre.block .s { color: #2c6a3e; }
 
+  /* FAQ — native <details>, no script (CSP-safe on this page) */
+  .faq { margin-top: 28px; border-top: 1px solid var(--rule); }
+  .faq details { border-bottom: 1px solid var(--rule-soft); }
+  .faq summary {
+    cursor: pointer;
+    padding: 20px 0;
+    font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 18px;
+    line-height: 1.4;
+    color: var(--ink);
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 20px;
+    transition: color 80ms;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after {
+    content: "+";
+    color: var(--accent);
+    font-family: ui-monospace, Menlo, monospace;
+    font-weight: 400;
+    font-size: 22px;
+    flex: none;
+    line-height: 1;
+  }
+  .faq details[open] summary::after { content: "\2013"; }
+  .faq summary:hover { color: var(--accent); }
+  .faq .a {
+    padding: 0 0 22px;
+    max-width: 68ch;
+    color: var(--ink-soft);
+    font-size: 16.5px;
+  }
+  .faq .a p { margin: 0 0 12px; }
+  .faq .a p:last-child { margin-bottom: 0; }
+
   /* footer */
   footer {
     padding: 56px 0 28px;
@@ -580,7 +619,7 @@
       <a href="/create/">Register</a>
       <a href="/verify/">Verify</a>
       <a href="#tiers">Tiers</a>
-      <a href="#scope">Scope</a>
+      <a href="#faq">FAQ</a>
     </nav>
     <span class="status">v0.2 · base layer live</span>
   </div>
@@ -608,6 +647,7 @@
       <a href="#how">How it works</a>
       <a href="#tiers">The layers</a>
       <a href="#scope">What it does &amp; doesn't prove</a>
+      <a href="#faq">FAQ</a>
       <a href="https://github.com/screenplay-registry/screenreg">Source &amp; spec</a>
     </div>
   </section>
@@ -789,9 +829,63 @@
     </div>
   </section>
 
+  <!-- FAQ -->
+  <section class="s" id="faq">
+    <div class="num">§ 5 · Questions</div>
+    <h2>The questions writers <em>actually ask.</em></h2>
+    <p>Short, honest answers. For the long version, see the <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/faq.md">full FAQ</a> and the <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/threat-model.md">threat model</a>.</p>
+
+    <div class="faq">
+      <details>
+        <summary>Does my screenplay ever leave my computer?</summary>
+        <div class="a"><p>No. Your draft is read and fingerprinted on your own machine — in your browser, or with the command-line tool if you prefer — and only a 32-byte fingerprint, not a single line of the script, is ever sent out to be timestamped. There is no upload, no account, and no copy of your screenplay on any server. There is nothing here for anyone to leak, subpoena, or train an AI on.</p></div>
+      </details>
+
+      <details>
+        <summary>What does the proof actually prove?</summary>
+        <div class="a"><p>That a draft with a specific fingerprint existed no later than a specific date — priority in time. Once the fingerprint is confirmed on Bitcoin (a few hours after you create it), no one — including us — can backdate or alter it, and anyone can verify it independently, forever, without trusting us.</p></div>
+      </details>
+
+      <details>
+        <summary>What does it <em>not</em> prove?</summary>
+        <div class="a"><p>It does not prove who wrote the script — a timestamp shows that bytes existed at a time, not who authored them. And it is not a substitute for registering with the U.S. Copyright Office, which is what lets you sue for infringement. Use this <em>alongside</em> the Copyright Office, not instead of it.</p></div>
+      </details>
+
+      <details>
+        <summary>To prove it later, do I have to reveal my script?</summary>
+        <div class="a"><p>To prove that the fingerprint is a <em>particular</em> screenplay, yes — you show that screenplay. But you choose when, and to whom. Until then, the only thing that has ever left your machine is an opaque 32-byte fingerprint, which reveals nothing about the content. And when you do reveal it, the math proves it is the exact, unaltered draft that existed on the recorded date — it cannot be a different or edited version.</p></div>
+      </details>
+
+      <details>
+        <summary>How is this different from the WGA or the Copyright Office?</summary>
+        <div class="a"><p>The WGA keeps a copy of your script on file for five years (about $25). The Copyright Office is the statutory registration you need before you can sue, and you upload the script to it (about $45, with a processing wait). This is a third, free option that runs in your browser in seconds and keeps the script on your machine. It complements the other two; it doesn't replace them.</p></div>
+      </details>
+
+      <details>
+        <summary>Is it really free? Do I need Bitcoin or a wallet?</summary>
+        <div class="a"><p>Free, with no account, no payment, no token, and no wallet. Bitcoin is only the public ledger the timestamp is anchored to, through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a> — there is no fee, no coin to buy, and no wallet popup. You never have to think about Bitcoin at all.</p></div>
+      </details>
+
+      <details>
+        <summary>Why does the confirmed proof take a few hours?</summary>
+        <div class="a"><p>OpenTimestamps gives you a pending proof almost immediately, then folds your fingerprint together with many others into a single summary that is committed to a Bitcoin block — usually within a few hours. Once that block is mined and the proof is upgraded, it stands on its own, permanently. The wait is Bitcoin's, not ours.</p></div>
+      </details>
+
+      <details>
+        <summary>What happens to my proof if this website disappears?</summary>
+        <div class="a"><p>Once your proof is confirmed on Bitcoin, it no longer depends on us at all. It verifies against the Bitcoin blockchain using open-source code — no server and no company required — so anyone can check it even if this site is long gone. That permanence is the whole point.</p></div>
+      </details>
+
+      <details>
+        <summary>What can I register, and from where?</summary>
+        <div class="a"><p>Today, drop a Fountain or plain-text screenplay into the browser. PDF screenplays convert to text with the <span class="mono">screenreg extract</span> command-line tool for now, and in-browser PDF support is coming soon. The command-line tool offers the same proof with more options for people who want them.</p></div>
+      </details>
+    </div>
+  </section>
+
   <!-- DEVELOPERS / INTEGRATORS / SPEC EXCERPT -->
   <section class="s" id="integrate">
-    <div class="num">§ 5 · For developers &amp; integrators</div>
+    <div class="num">§ 6 · For developers &amp; integrators</div>
     <h2>Any screenwriting app can add this, <em>without asking us.</em></h2>
     <p>Writers never touch a command line; the base layer above is a browser page. This part is for people building screenwriting tools. The reference implementation is TypeScript, MIT-licensed, dependency-light, and has no exotic cryptography. Desktop apps, web apps, and indie Fountain editors can add a "register this draft" action by spawning the CLI, or by running the same logic in the browser through the shared modules behind <span class="mono">/create/</span>.</p>
 
@@ -820,7 +914,7 @@
 
   <!-- GOVERNANCE -->
   <section class="s" id="governance">
-    <div class="num">§ 6 · Governance</div>
+    <div class="num">§ 7 · Governance</div>
     <h2>Steward today. Council tomorrow.</h2>
     <p>The protocol is presently maintained by its initial contributors. The roadmap calls for transition to an independent technical council with representation from working screenwriters, integrators, legal practitioners, and protocol engineers (triggered by three external integrators OR six months, whichever comes first). The spec, test vectors, and reference implementation are licensed such that any party may fork and continue the work without our permission and without our cooperation. <strong>That is the point.</strong></p>
 
@@ -838,7 +932,7 @@
 
   <!-- SPEC / FOOTER LINKS -->
   <section class="s" id="spec">
-    <div class="num">§ 7 · Specification</div>
+    <div class="num">§ 8 · Specification</div>
     <h2>The full spec, section by section.</h2>
     <ul style="font-family: ui-monospace, Menlo, monospace; font-size: 14px; line-height: 2; padding-left: 0; list-style: none;">
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/01-normalization.md">Section 01 · Normalization</a></li>
