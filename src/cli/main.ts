@@ -48,6 +48,7 @@ import { timelockEncrypt, timelockDecrypt } from '../timelock/drand.js'
 import { submitOts } from '../anchors/ots-submit.js'
 import { verifyOtsAgainstFileDigest, parseOts } from '../anchors/ots-verify.js'
 import { finalizeProof, type FinalizeOptions } from '../shared/finalize/index.js'
+import { BANNER } from './banner.js'
 import {
   buildEncryptedFieldsBlock,
   decryptFieldsBlock,
@@ -1831,6 +1832,7 @@ function printPriorityOutcome(priority: ReturnType<typeof resolvePriority>): voi
 // ---------------------------------------------------------------------------
 
 function printUsage(): void {
+  process.stderr.write(BANNER + '\n')
   process.stderr.write(`Usage:
   ${CLI_NAME} register <file> [--encrypt-title TITLE] [--encrypt-author AUTHOR]
                        [--training-mining allowed|notAllowed|constrained]
