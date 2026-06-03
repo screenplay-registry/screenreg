@@ -19,6 +19,7 @@ import { buildEncryptedFieldsBlock } from './lib/encrypt/fields.js'
 import { CLAIM_VERSION } from './lib/envelope/types.js'
 import { detectScenes, buildSceneTree } from './lib/merkle/scene-tree.js'
 import { finalizeProof, encodePendingHandle, decodePendingHandle } from './lib/finalize/index.js'
+import { buildScreenreg, buildEvidenceScreenreg } from './lib/screenreg/index.js'
 
 const CALENDARS = [
   'https://a.pool.opentimestamps.org',
@@ -40,6 +41,10 @@ const els = {
   stepsRoot: document.getElementById('stepsRoot'),
   calendarList: document.getElementById('calendarList'),
   downloads: document.getElementById('downloads'),
+  bundleWarn: document.getElementById('bundleWarn'),
+  indivFiles: document.getElementById('indivFiles'),
+  downloadBundle: document.getElementById('downloadBundle'),
+  downloadEvidence: document.getElementById('downloadEvidence'),
   downloadManifest: document.getElementById('downloadManifest'),
   downloadProof: document.getElementById('downloadProof'),
   downloadIdentityKey: document.getElementById('downloadIdentityKey'),
@@ -323,14 +328,15 @@ async function run() {
       ],
     })
 
+    // Loose individual files first: they are deterministic and never blocked on bundling, so the
+    // writer's proof is in hand regardless of what follows. The .screenreg is assembled after, in
+    // its own guarded step — if it ever fails, these remain usable.
     const manifestJson = JSON.stringify(envelope, null, 2)
     const manifestBlob = new Blob([manifestJson], { type: 'application/json' })
     const otsBlob = new Blob([otsBytes], { type: 'application/vnd.opentimestamps.v1' })
-
     const manifestUrl = URL.createObjectURL(manifestBlob)
     const otsUrl = URL.createObjectURL(otsBlob)
     lastObjectUrls.push(manifestUrl, otsUrl)
-
     els.downloadManifest.href = manifestUrl
     els.downloadManifest.download = deriveManifestName(fileForThisRun.name)
     els.downloadProof.href = otsUrl
@@ -346,6 +352,39 @@ async function run() {
       els.downloadIdentityKey.hidden = true
       els.downloadIdentityKey.removeAttribute('href')
     }
+
+    // The single-file .screenreg is the primary artifact: a full bundle that embeds the
+    // screenplay (self-contained verification) and an evidence bundle that omits it (shareable
+    // without revealing the script). Both wrap the SAME envelope + proof; bundling is not
+    // commitment-bearing and never changes claimHash. inputBytes is the exact source whose
+    // normalization produced contentHash, so it is what the full bundle embeds.
+    setStep('bundle', 'active', 'packaging the screenplay + proof into one file…')
+    els.bundleWarn.hidden = true
+    try {
+      const fullBundle = await buildScreenreg({ envelope, otsBytes, sourceText: inputBytes })
+      const evidenceBundleBytes = await buildEvidenceScreenreg({ envelope, otsBytes })
+      const bundleUrl = URL.createObjectURL(new Blob([fullBundle], { type: 'application/zip' }))
+      const evidenceUrl = URL.createObjectURL(new Blob([evidenceBundleBytes], { type: 'application/zip' }))
+      lastObjectUrls.push(bundleUrl, evidenceUrl)
+      els.downloadBundle.href = bundleUrl
+      els.downloadBundle.download = deriveBundleName(fileForThisRun.name)
+      els.downloadBundle.hidden = false
+      els.downloadEvidence.href = evidenceUrl
+      els.downloadEvidence.download = deriveEvidenceName(fileForThisRun.name)
+      els.downloadEvidence.hidden = false
+      setStep('bundle', 'done', `${fullBundle.length} B full · ${evidenceBundleBytes.length} B shareable`)
+    } catch (e) {
+      // Bundling is deterministic over in-memory bytes, so this should not happen for a valid
+      // envelope; if it does, keep the loose files usable and say so plainly instead of failing.
+      console.error('[create] .screenreg assembly failed; loose files remain available', e)
+      setStep('bundle', 'err', e && e.message ? e.message : String(e))
+      els.downloadBundle.hidden = true
+      els.downloadEvidence.hidden = true
+      els.bundleWarn.textContent =
+        'Your browser could not assemble the one-file .screenreg, but your proof is ready as the individual files below — download all of them and keep them together.'
+      els.bundleWarn.hidden = false
+      if (els.indivFiles) els.indivFiles.open = true
+    }
     els.downloads.hidden = false
 
     // Stand up the serverless finalize ghost-loader: build a resumable token,
@@ -358,7 +397,9 @@ async function run() {
       const token = encodePendingHandle({ v: 1, claimHash, ots: otsBytes, title, createdAt: new Date().toISOString() })
       setResumeHash(token)
       upsertPendingRecord({ claimHash, title, token, status: 'pending' })
-      showGhostPending(otsBytes, claimHash, title, true) // freshly built here → known valid
+      // Pass the envelope + source through (active run only — never in the resume token, which
+      // stays small and script-free) so the confirmed download can be a finalized .screenreg.
+      showGhostPending(otsBytes, claimHash, title, true, { envelope, sourceBytes: inputBytes })
     } catch (e) {
       console.error('[create] ghost-loader setup failed (non-fatal)', e)
     }
@@ -396,6 +437,12 @@ async function run() {
   }
 }
 
+function deriveBundleName(filename) {
+  return filename.replace(/\.(fountain|txt)$/i, '') + '.screenreg'
+}
+function deriveEvidenceName(filename) {
+  return filename.replace(/\.(fountain|txt)$/i, '') + '.evidence.screenreg'
+}
 function deriveManifestName(filename) {
   return filename.replace(/\.(fountain|txt)$/i, '') + '.manifest.json'
 }
@@ -490,8 +537,11 @@ function setResumeHash(token) {
 // resumed from a #p= link we have NOT yet parsed it, so we show a neutral
 // "checking" headline and let the first finalize check prove it's real (or
 // surface an error) — never claim "valid now" for an unverified token.
-function showGhostPending(otsBytes, claimHash, title, knownValid) {
-  activeFinalize = { otsBytes, claimHash, title }
+function showGhostPending(otsBytes, claimHash, title, knownValid, extras) {
+  // `extras` ({ envelope, sourceBytes }) is present only for a proof built in THIS tab, enabling
+  // a finalized .screenreg on confirmation. A resumed proof (from a #p= link) has neither, so its
+  // confirmed download falls back to the upgraded .ots.
+  activeFinalize = { otsBytes, claimHash, title, extras: extras || null }
   els.ghostCard.classList.remove('confirmed', 'error')
   if (knownValid) {
     setPendingValidCopy()
@@ -550,7 +600,7 @@ async function runFinalizeCheck() {
   if (!activeFinalize || activeFinalize.claimHash !== claimHash) return
   if (result.status === 'confirmed') {
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
-    showGhostConfirmed(result.otsBytes, result.bitcoinBlockHeights || [], title)
+    await showGhostConfirmed(result.otsBytes, result.bitcoinBlockHeights || [], title, activeFinalize.extras, claimHash)
     markPendingConfirmed(claimHash, result.bitcoinBlockHeights || [])
   } else if (result.status === 'error') {
     // The bytes are not a proof we can parse (e.g. a hand-crafted resume link).
@@ -568,20 +618,50 @@ async function runFinalizeCheck() {
   }
 }
 
-function showGhostConfirmed(upgradedOts, heights, title) {
+async function showGhostConfirmed(upgradedOts, heights, title, extras, expectedClaimHash) {
+  // Build the download artifact BEFORE mutating any UI, so a proof the user replaced mid-await
+  // never publishes a stale confirmation over the new one. Prefer a finalized .screenreg (the
+  // upgraded proof folded back into the one-file bundle) when this tab still holds the envelope +
+  // source; on a resumed proof we only have the .ots, which is itself a complete Bitcoin proof.
+  let blob
+  let downloadName
+  let rebuilt = false
+  if (extras && extras.envelope && extras.sourceBytes) {
+    try {
+      const finalizedBundle = await buildScreenreg({
+        envelope: extras.envelope,
+        otsBytes: upgradedOts,
+        sourceText: extras.sourceBytes,
+      })
+      blob = new Blob([finalizedBundle], { type: 'application/zip' })
+      downloadName = title ? deriveBundleName(title) : 'proof.screenreg'
+      rebuilt = true
+    } catch (e) {
+      console.error('[create] could not rebuild finalized .screenreg; falling back to .ots', e)
+    }
+  }
+  if (!rebuilt) {
+    blob = new Blob([upgradedOts], { type: 'application/vnd.opentimestamps.v1' })
+    downloadName = title ? deriveProofName(title) : 'proof.ots'
+  }
+
+  // The active proof may have been replaced while buildScreenreg was awaited — do not paint a
+  // confirmation (or publish a download) over a different proof.
+  if (!activeFinalize || activeFinalize.claimHash !== expectedClaimHash) return
+
   els.ghostCard.classList.add('confirmed')
   els.ghostHeadline.textContent = '✓ Confirmed on Bitcoin'
-  els.ghostDetail.textContent = heights.length
-    ? `Anchored at Bitcoin block ${heights.join(', ')}. Your proof is now self-contained — ` +
-      'it verifies against Bitcoin block headers alone, with no calendar or server.'
-    : 'Your proof is now self-contained — it verifies against Bitcoin block headers alone, with no calendar or server.'
   els.ghostCheck.hidden = true
   els.ghostResume.hidden = true
-  const blob = new Blob([upgradedOts], { type: 'application/vnd.opentimestamps.v1' })
+  els.ghostDetail.textContent =
+    (heights.length ? `Anchored at Bitcoin block ${heights.join(', ')}. ` : '') +
+    (rebuilt
+      ? 'Download the finalized .screenreg below — it now verifies against Bitcoin block headers alone, with no calendar or server.'
+      : 'Your proof is now self-contained — it verifies against Bitcoin block headers alone, with no calendar or server.')
   const url = URL.createObjectURL(blob)
   lastObjectUrls.push(url)
   els.downloadFinal.href = url
-  els.downloadFinal.download = title ? deriveProofName(title) : 'proof.ots'
+  els.downloadFinal.download = downloadName
   els.downloadFinal.hidden = false
   els.ghost.hidden = false
 }

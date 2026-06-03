@@ -244,6 +244,7 @@
     text-decoration: none;
   }
   .download-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .download-btn small { font-weight: 400; font-size: 12px; opacity: 0.7; }
   .downloads .note {
     margin-top: 16px;
     font-size: 14px;
@@ -251,6 +252,20 @@
     line-height: 1.55;
   }
   .downloads .note .mono { color: var(--ink); }
+  .downloads .bundle-warn { color: var(--accent, #b3261a); font-weight: 600; }
+  .downloads .indiv-files {
+    margin-top: 20px;
+    border-top: 1px solid var(--rule, #d8d4c8);
+    padding-top: 14px;
+  }
+  .downloads .indiv-files summary {
+    cursor: pointer;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
+    color: var(--muted, #6a655c);
+  }
+  .downloads .indiv-files summary:hover { color: var(--ink); }
+  .downloads .indiv-files .links { margin-top: 14px; }
 
   .calendars {
     margin-top: 8px;
@@ -439,18 +454,28 @@
     <div class="step" data-step="claim-hash"><div class="mark">4</div><div class="body"><div class="title">Claim hash (canonicalized)</div><div class="detail muted" data-detail>—</div></div></div>
     <div class="step" data-step="calendars"><div class="mark">5</div><div class="body"><div class="title">Submit digest to OpenTimestamps calendars</div><div class="detail muted" data-detail>—</div><ul class="calendars" id="calendarList"></ul></div></div>
     <div class="step" data-step="ots"><div class="mark">6</div><div class="body"><div class="title">Assemble <span class="mono">.proof.ots</span></div><div class="detail muted" data-detail>—</div></div></div>
+    <div class="step" data-step="bundle"><div class="mark">7</div><div class="body"><div class="title">Assemble your <span class="mono">.screenreg</span></div><div class="detail muted" data-detail>—</div></div></div>
   </section>
 
   <section class="downloads" id="downloads" hidden>
-    <h2>Your proof artifacts</h2>
+    <h2>Your proof — one file</h2>
     <div class="links">
-      <a class="download-btn" id="downloadManifest"><span>→</span> manifest.json</a>
-      <a class="download-btn" id="downloadProof"><span>→</span> proof.ots</a>
-      <a class="download-btn" id="downloadIdentityKey" hidden><span>→</span> identity.pem</a>
+      <a class="download-btn" id="downloadBundle"><span>→</span> .screenreg <small>· keep this</small></a>
+      <a class="download-btn" id="downloadEvidence"><span>→</span> shareable proof <small>· safe to send</small></a>
     </div>
-    <p class="note">
-      Keep both files together — verification requires the original screenplay file plus these two artifacts. Until the Bitcoin confirmation lands (about 1–6 hours), the proof verifies as a pending calendar attestation; finalize it below to fold in the Bitcoin block — or run <span class="mono">screenreg finalize proof.ots</span> with the CLI.
+    <p class="note" id="downloadsNote">
+      The <span class="mono">.screenreg</span> is your self-contained proof — the screenplay, the registration record, and the timestamp in one file. Keep it somewhere safe. The <strong>shareable proof</strong> is the same dated proof <em>without</em> your screenplay inside, so you can hand it to anyone without revealing the script. Until the Bitcoin confirmation lands (about 1–6 hours) the proof is a pending calendar attestation; finalize it below to fold in the Bitcoin block.
     </p>
+    <p class="note bundle-warn" id="bundleWarn" hidden></p>
+    <details class="indiv-files" id="indivFiles">
+      <summary>Prefer the individual files?</summary>
+      <div class="links">
+        <a class="download-btn" id="downloadManifest"><span>→</span> manifest.json</a>
+        <a class="download-btn" id="downloadProof"><span>→</span> proof.ots</a>
+        <a class="download-btn" id="downloadIdentityKey" hidden><span>→</span> identity.pem</a>
+      </div>
+      <p class="note">The same envelope and timestamp, unbundled. Your identity key (<span class="mono">.pem</span>), if you signed, is a private key — it is never placed inside a <span class="mono">.screenreg</span>.</p>
+    </details>
   </section>
 
   <section class="ghost" id="ghost" hidden>
@@ -464,7 +489,7 @@
       </p>
       <div class="ghost-actions">
         <button class="ghost-btn" id="ghostCheck" type="button">Check now</button>
-        <a class="download-btn" id="downloadFinal" hidden><span>→</span> finalized proof.ots</a>
+        <a class="download-btn" id="downloadFinal" hidden><span>→</span> download confirmed proof</a>
       </div>
       <p class="ghost-resume" id="ghostResume" hidden>
         Closing the tab? <button type="button" id="ghostCopy">Copy a link to finish later</button> — or just keep your files and re-drop the proof on the <a href="/verify/">verify page</a> anytime.
