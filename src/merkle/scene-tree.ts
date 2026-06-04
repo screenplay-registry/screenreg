@@ -65,19 +65,24 @@ export interface Scene {
  * - Prefix matched case-insensitively, followed by space/hyphen/end-of-line.
  * - Preamble bytes before the first heading are NOT a scene leaf in v1.
  */
-export function detectScenes(normalized: Buffer): Scene[] {
+export function detectScenes(normalized: Uint8Array): Scene[] {
+  // Coerce to Buffer: the heading match below uses subarray(...).toString('utf8'),
+  // which on a plain Uint8Array (e.g. a caller that skipped normalize()) ignores
+  // the encoding and yields comma-joined byte values — matching no prefix, so zero
+  // scenes. A Buffer input is processed byte-for-byte identically.
+  const buf: Buffer = Buffer.isBuffer(normalized) ? normalized : Buffer.from(normalized)
   const headingPositions: number[] = []
-  const n = normalized.length
+  const n = buf.length
 
   for (let i = 0; i < n; i++) {
-    const isLineStart = i === 0 || normalized[i - 1] === 0x0a
+    const isLineStart = i === 0 || buf[i - 1] === 0x0a
     if (!isLineStart) continue
     for (const prefix of HEADING_PREFIXES) {
       const prefixLen = prefix.length
       if (i + prefixLen > n) continue
-      const slice = normalized.subarray(i, i + prefixLen).toString('utf8')
+      const slice = buf.subarray(i, i + prefixLen).toString('utf8')
       if (slice.toUpperCase() !== prefix) continue
-      const nextChar = i + prefixLen < n ? normalized[i + prefixLen]! : -1
+      const nextChar = i + prefixLen < n ? buf[i + prefixLen]! : -1
       if (
         nextChar === 0x20 || // space
         nextChar === 0x2d || // -
@@ -98,7 +103,7 @@ export function detectScenes(normalized: Buffer): Scene[] {
       sceneIndex: i,
       byteStart: start,
       byteEnd: end,
-      sceneBytes: normalized.subarray(start, end),
+      sceneBytes: buf.subarray(start, end),
     })
   }
   return scenes

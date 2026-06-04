@@ -159,11 +159,18 @@ export function validateStrictUtf8(input: Buffer): { ok: true } | { ok: false; o
  *
  * Everything else is preserved byte-for-byte.
  */
-export function normalize(input: Buffer): NormalizeResult {
+export function normalize(input: Uint8Array): NormalizeResult {
+  // Accept any byte source. The canonical caller passes a Buffer (file reads,
+  // the CLI), but SDK consumers commonly hold a Uint8Array (fetch()/File APIs).
+  // Coerce to Buffer up front: Step 3 decodes via Buffer.prototype.toString('utf8'),
+  // and a plain Uint8Array's toString() ignores the encoding and yields comma-joined
+  // byte values — silently corrupting the normalized bytes (and the contentHash).
+  // Output bytes for a Buffer input are byte-for-byte unchanged (frozen v1 profile).
+  const buf: Buffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
   const transforms: TransformRecord[] = []
 
   // Step 1: Validate UTF-8
-  const utf8Validation = validateStrictUtf8(input)
+  const utf8Validation = validateStrictUtf8(buf)
   if (!utf8Validation.ok) {
     return {
       ok: false,
@@ -173,7 +180,7 @@ export function normalize(input: Buffer): NormalizeResult {
   }
 
   // Step 2: Strip leading BOM (only at start; embedded U+FEFF is preserved per spec §3)
-  let working = input
+  let working = buf
   if (
     working.length >= 3 &&
     working[0] === 0xef &&
@@ -245,7 +252,7 @@ export function normalize(input: Buffer): NormalizeResult {
  * Returns the hash string in the canonical "sha256:<lowercase-hex>" form per spec §6.
  * Returns null if normalization fails (invalid UTF-8).
  */
-export function contentHash(input: Buffer): string | null {
+export function contentHash(input: Uint8Array): string | null {
   const result = normalize(input)
   if (!result.ok) return null
   return contentHashOfNormalized(result.normalized)
@@ -255,7 +262,7 @@ export function contentHash(input: Buffer): string | null {
  * Hash already-normalized bytes. Useful for test vector verification and for callers
  * that have stored the normalized form separately.
  */
-export function contentHashOfNormalized(normalized: Buffer): string {
+export function contentHashOfNormalized(normalized: Uint8Array): string {
   const digest = createHash('sha256').update(normalized).digest('hex')
   return `sha256:${digest}`
 }
