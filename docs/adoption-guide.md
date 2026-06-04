@@ -54,9 +54,9 @@ For tools built in Node / Electron / browser (the package is not yet published t
 
 ```typescript
 // All public exports come from the package root. The package's `exports` map
-// resolves "@screenplay-registry/cli" to a curated index re-exporting every
-// stable symbol. Subpath imports (`/normalize`, `/envelope`, etc.) are NOT
-// supported in v1 — reaching into deeper paths breaks across versions.
+// resolves "screenreg" to a curated index re-exporting every stable symbol.
+// Subpath imports (`/normalize`, `/envelope`, etc.) are NOT supported in v1 —
+// reaching into deeper paths breaks across versions.
 import {
   normalize,
   contentHashOfNormalized,
@@ -66,7 +66,7 @@ import {
   detectScenes,
   buildSceneTree,
   submitOts,
-} from '@screenplay-registry/cli'
+} from 'screenreg'
 
 async function registerScreenplay(fountainBytes: Buffer): Promise<{ envelope: any; otsBytes: Buffer }> {
   const norm = normalize(fountainBytes)

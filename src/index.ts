@@ -1,10 +1,10 @@
 /**
- * Public SDK surface for `@screenplay-registry/cli` (consumed as a library).
+ * Public SDK surface for the `screenreg` package (consumed as a library).
  *
  * This module is the SUPPORTED entrypoint for third-party integrators. Reaching
  * into deeper module paths (e.g. `src/merkle/scene-tree`) is unsupported — those
  * may be reorganized without a major version bump. Anything you can import from
- * `@screenplay-registry/cli` is covered by semver-style stability.
+ * `screenreg` is covered by semver-style stability.
  *
  * Stability tiers:
  *   - Locked commitment-bearing constants (CLAIM_VERSION, SCHEMA_ID, profile IDs,
