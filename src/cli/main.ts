@@ -852,9 +852,13 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
   // non-secret, the values stay ciphertext. So verify announces they exist and
   // are unlockable, without ever displaying them.
   const ef = envelope.committedClaim.encryptedFields
+  // Field names are registrant-controlled; strip control chars + cap length so a
+  // crafted .screenreg can't inject newlines/ANSI into the terminal output.
+  // eslint-disable-next-line no-control-regex
+  const safeName = (s: string): string => s.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 64)
   const encLine =
     ef && ef.fields.length > 0
-      ? `  Encrypted:     ${ef.fields.map((f) => f.name).join(', ')} 🔒 present as ciphertext — unlock with your password (\`${CLI_NAME} decrypt-field\`)\n`
+      ? `  Encrypted:     ${ef.fields.map((f) => safeName(f.name)).join(', ')} 🔒 present as ciphertext — unlock with your password (\`${CLI_NAME} decrypt-field\`)\n`
       : ''
   const dateOnlyTag = contentsChecked ? '' : ', DATE ONLY'
   // Alternative external block-header check, for when no in-process source was

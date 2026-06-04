@@ -168,6 +168,15 @@ describe('CLI: register default = single .screenreg (S-C)', () => {
     // the plaintext values must NEVER appear in verify output
     expect(v.stdout).not.toContain('My Secret Title')
     expect(v.stdout).not.toContain('Jane Q Writer')
+    // nor the encryption material (ciphertext / iv / tag / salt) — unpack the bundle and check.
+    runCli(['unpack', join(tmp, 'draft.screenreg'), '--out-dir', join(tmp, 'u')])
+    const block = JSON.parse(readFileSync(join(tmp, 'u', 'envelope.json'), 'utf8')).committedClaim.encryptedFields
+    for (const f of block.fields) {
+      expect(v.stdout).not.toContain(f.ciphertext)
+      expect(v.stdout).not.toContain(f.iv)
+      expect(v.stdout).not.toContain(f.tag)
+    }
+    expect(v.stdout).not.toContain(block.masterSalt)
   })
 
   it('verify does NOT show an Encrypted line when there are no encrypted fields', () => {

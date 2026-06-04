@@ -84,9 +84,12 @@ It depends which file you hand them — and that's exactly why there are two.
 - the date your fingerprint was timestamped (once it's Bitcoin-anchored);
 - your AI-training preference, if you set one;
 - a pseudonymous Ed25519 public key, if you chose to sign the registration (a key, not your name);
-- a pointer to an earlier registration, if you filed this one as a revision.
+- a pointer to an earlier registration, if you filed this one as a revision;
+- if you encrypted the title/author: the *fact* that encrypted fields exist, their field **names** ("title", "author") and the key-derivation parameters — but never the values (those stay ciphertext);
+- if you used the optional time-lock: the presence of time-locked fields and their unlock time (again, not the contents);
+- anything you put in the free-form **extension** fields (`claimExtensions`) — these are committed in the clear, so treat them as public.
 
-It does **not** reveal your screenplay's text, title, or author. There is no plaintext title or author field anywhere in a registration — so a proof-only file is safe to post publicly or hand to a studio: it proves "a document with this fingerprint existed by this date," and nothing more.
+By default a registration carries **no plaintext title or author field** — the default flow commits only the fingerprints, counts, and roots above. So a proof-only file is safe to post publicly or hand to a studio: it proves "a document with this fingerprint existed by this date," and nothing more. The one caveat is the extension fields: they are free-form and public, so don't put anything you want kept private into `claimExtensions` (use the encrypted-fields option for private metadata).
 
 **The full file (`.screenreg`)** — your private keep-copy — additionally embeds the screenplay text itself, so anyone you give it to can read the whole script. Keep this one; share only the `.evidence` version.
 
