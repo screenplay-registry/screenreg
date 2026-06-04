@@ -953,7 +953,10 @@ proof.claimHash     <span class="cmt">// "sha256:9f2c4e7a…d771ba"</span>
 <span class="cmt">// verify against Bitcoin — offline, no server in the trust path</span>
 <span class="k">const</span> r = <span class="k">await</span> verify(proof.screenreg);
 <span class="cmt">// → { ok: true, anchoredAt: "2026-…Z", blockHeight: 875432 }</span></pre>
-<pre class="pane pane-cli"><span class="cmt"># Generate and anchor the whole proof yourself — your machine, your keys.</span>
+<pre class="pane pane-cli"><span class="cmt"># Install once — Node ≥20, no Python, no native deps.</span>
+<span class="k">$</span> npm install <span class="v">-g</span> screenreg            <span class="cmt"># or one-off: npx screenreg …</span>
+
+<span class="cmt"># Generate and anchor the whole proof yourself — your machine, your keys.</span>
 <span class="k">$</span> screenreg register draft.fountain <span class="v">--identity</span>
 <span class="cmt">#   draft.screenreg          full proof, signed with your Ed25519 key</span>
 
@@ -971,6 +974,7 @@ proof.claimHash     <span class="cmt">// "sha256:9f2c4e7a…d771ba"</span>
 
     <div class="cta-row">
       <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/adoption-guide.md">→ Read the adoption guide</a>
+      <a href="https://www.npmjs.com/package/screenreg" rel="noopener">→ screenreg on npm</a>
       <a href="https://github.com/screenplay-registry/screenreg/tree/main/spec/v1/testvectors" class="subtle">→ Test vectors (CC0)</a>
       <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/envelope.schema.json" class="subtle">→ JSON Schema</a>
     </div>

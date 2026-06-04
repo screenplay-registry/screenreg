@@ -53,8 +53,9 @@ Local `npm publish` works too, just without the provenance attestation.
 ## After publishing
 
 - Verify from a clean directory: `npx screenreg@latest verify some.screenreg` (no repo, no Python).
-- Update the docs that currently say "not yet published to npm" (README quick-start, `docs/adoption-guide.md`
-  Path C) to `npm i -g screenreg` / `npx screenreg`.
+- The user-facing docs already reference the package (`npm i -g screenreg` / `npx screenreg`) — README
+  quick-start, `docs/adoption-guide.md`, `docs/faq.md`, and the landing page. Keep them in sync on the
+  next version bump.
 - Bump `version` in `package.json` per change (semver; start at 0.x to signal pre-1.0). The public SDK
   surface is `src/index.ts` only — keep those exports stable across minors.
 

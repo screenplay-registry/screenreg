@@ -25,7 +25,7 @@ The page handles the hash, calendar fan-out, and proof assembly entirely client-
 
 ### Path B: shell out to the CLI (simplest in-process flow)
 
-Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. By default it produces one self-contained `<file>.screenreg`; a tool that prefers the separate `.manifest.json` + `.proof.ots` to file in a registrations subdirectory should pass `--loose` (or `--envelope-out`/`--ots-out` for explicit paths). (In these examples `screenreg` is the cloned `./bin/screenreg.mjs` — it is not published to npm yet, so resolve the path or alias it in your tool.)
+Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. By default it produces one self-contained `<file>.screenreg`; a tool that prefers the separate `.manifest.json` + `.proof.ots` to file in a registrations subdirectory should pass `--loose` (or `--envelope-out`/`--ots-out` for explicit paths). (In these examples `screenreg` is the published CLI — install it with `npm i -g screenreg`, or invoke it ad-hoc with `npx screenreg`; from a clone it's `./bin/screenreg.mjs`.)
 
 This works in any tool that can spawn a subprocess. Total integration effort: ~1 hour.
 
@@ -50,7 +50,7 @@ Optional flags:
 
 ### Path C: import the TypeScript SDK (for JS/TS tools)
 
-For tools built in Node / Electron / browser (the package is not yet published to npm — vendor it from a clone or a git dependency for now):
+For tools built in Node / Electron / browser (`npm install screenreg`):
 
 ```typescript
 // All public exports come from the package root. The package's `exports` map

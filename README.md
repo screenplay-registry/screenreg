@@ -95,32 +95,35 @@ Verify any registered proof at [**screenplayregistry.org/verify/**](https://scre
 ### From the command line
 
 ```bash
-# Clone + install (Node ≥20 — that's all; no Python, no native deps)
-git clone https://github.com/screenplay-registry/screenreg.git
-cd screenreg
-npm install
+# Install the CLI — Node ≥20, that's all; no Python, no native deps.
+npm install -g screenreg          # global command:  screenreg …
+# no global install?              npx screenreg …
+# from source?                    git clone https://github.com/screenplay-registry/screenreg.git
+#                                 cd screenreg && npm install   # then ./bin/screenreg.mjs in place of screenreg
+```
 
+```bash
 # Register a Fountain screenplay → ONE self-contained file
-./bin/screenreg.mjs register my-screenplay.fountain
+screenreg register my-screenplay.fountain
 #   → my-screenplay.screenreg   (your screenplay + the proof in one file; Bitcoin confirmation ~1-6h)
-#   later, once Bitcoin confirms: ./bin/screenreg.mjs finalize my-screenplay.screenreg
+#   later, once Bitcoin confirms: screenreg finalize my-screenplay.screenreg
 
 # Verify it — one file, on the CLI or in the browser (drop it at screenplayregistry.org/verify/):
-./bin/screenreg.mjs verify my-screenplay.screenreg
+screenreg verify my-screenplay.screenreg
 # → ✓ VERIFIED — claim hash matches and the screenplay contents match the registration
 #   (a proof-only .evidence.screenreg verifies the date; add the screenplay to confirm contents:
-#    ./bin/screenreg.mjs verify my-screenplay.evidence.screenreg my-screenplay.fountain)
+#    screenreg verify my-screenplay.evidence.screenreg my-screenplay.fountain)
 
 # Prefer separate files end-to-end (integrators)? --loose emits the manifest + .ots, no bundle:
-./bin/screenreg.mjs register my-screenplay.fountain --loose
+screenreg register my-screenplay.fountain --loose
 #   → my-screenplay.fountain.manifest.json + my-screenplay.fountain.proof.ots
-./bin/screenreg.mjs verify my-screenplay.fountain \
+screenreg verify my-screenplay.fountain \
     my-screenplay.fountain.manifest.json my-screenplay.fountain.proof.ots
 
 # Register from a PDF (v0.2+): two-step so you review the extracted Fountain
-./bin/screenreg.mjs extract my-screenplay.pdf > my-screenplay.fountain
+screenreg extract my-screenplay.pdf > my-screenplay.fountain
 # ... review my-screenplay.fountain, edit if the extractor mis-classified anything ...
-./bin/screenreg.mjs register my-screenplay.fountain --source-pdf my-screenplay.pdf
+screenreg register my-screenplay.fountain --source-pdf my-screenplay.pdf
 #   → the envelope records the source-PDF SHA-256 in
 #     evidenceBundle.bundleExtensions.sourceExtractor for archival audit
 ```
