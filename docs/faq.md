@@ -85,9 +85,9 @@ It depends which file you hand them — and that's exactly why there are two.
 - your AI-training preference, if you set one;
 - a pseudonymous Ed25519 public key, if you chose to sign the registration (a key, not your name);
 - a pointer to an earlier registration, if you filed this one as a revision;
-- if you encrypted the title/author: the *fact* that encrypted fields exist, their field **names** ("title", "author") and the key-derivation parameters — but never the values (those stay ciphertext);
-- if you used the optional time-lock: the presence of time-locked fields and their unlock time (again, not the contents);
-- anything you put in the free-form **extension** fields (`claimExtensions`) — these are committed in the clear, so treat them as public.
+- if you encrypted the title/author: the field **names** ("title", "author"), the key-derivation parameters, and, per field, the IV, the ciphertext, the GCM tag, and a *padding bucket* that reveals the rough length of the value (e.g. ≤16 / ≤64 / ≤256 chars) — but never the value itself;
+- if you used the optional time-lock: the time-locked field **names**, their ciphertext, the unlock round + time, and which Drand chain/scheme — but not the contents (until the unlock time);
+- anything you put in the free-form **extension** fields (`claimExtensions`) — these are committed in the clear, so treat them as fully public.
 
 By default a registration carries **no plaintext title or author field** — the default flow commits only the fingerprints, counts, and roots above. So a proof-only file is safe to post publicly or hand to a studio: it proves "a document with this fingerprint existed by this date," and nothing more. The one caveat is the extension fields: they are free-form and public, so don't put anything you want kept private into `claimExtensions` (use the encrypted-fields option for private metadata).
 
@@ -101,7 +101,7 @@ By default a registration carries **no plaintext title or author field** — the
 
 **Yes — and you do by default.** The protocol does not bind your real-world identity to a registration in v1. The hash that goes to Bitcoin is just 32 bytes of randomness from Bitcoin's perspective; nothing identifies you.
 
-If you also use encrypted manifest fields (title, author), even your own LOCAL copies of the manifest don't reveal anything without your password.
+If you also use encrypted manifest fields (title, author), the encrypted *values* stay private without your password — even in your own local copies. (The field names and an approximate length are still visible; only the values are protected. See "What can someone who has my proof actually see?" above.)
 
 (v2+ MAY add optional identity binding via Sigstore-style ephemeral OIDC certs. Public identity logs have their own privacy considerations for writers — we're treating that as a careful design problem.)
 
