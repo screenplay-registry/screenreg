@@ -73,6 +73,7 @@
     "@types/node": "^22.10.0",
     "ajv": "^8.17.1",
     "fast-check": "^3.23.0",
+    "pdfjs-dist": "4.10.38",
     "tsx": "^4.22.3",
     "typescript": "^5.7.0",
     "vitest": "^4.1.7"
@@ -82,9 +83,7 @@
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
-    "drand-client": "^1.4.2",
-    "pdfjs-dist": "4.10.38",
-    "tlock-js": "^0.9.0"
+    "tlock-js": "0.9.0"
   },
   "optionalDependencies": {
     "pdf2json": "^4.0.3"
