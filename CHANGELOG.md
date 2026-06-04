@@ -35,6 +35,15 @@ Two optional, additive tiers layered on top of the frozen v1 core: a secondary E
 
 No v1 commitment-bearing surface changed: the normalization profile, canonicalization scheme, claim and envelope URN namespaces, scene-tree and paragraph-tree profile IDs and domain tags, AES-256-GCM AAD format, and Ed25519 registrant wire format are all unchanged byte-for-byte. The new evidence proof type, registry-record URN, and spec sections are additive and non-committing. The peripheral `src/anchors/eth/` module adds a keccak/secp256k1 dependency confined to that module; the commitment-bearing core and the cross-runtime shared modules remain dependency-free.
 
+## [0.2.1] — Bug fixes (reference implementation only; no committed bytes change)
+
+Two fixes surfaced by an end-to-end shakedown of the published package. Neither changes any commitment-bearing byte, profile ID, or the output of any valid `Buffer` input; the v1 conformance corpus and the cross-implementation byte-parity tests are unchanged and pass.
+
+### Fixed
+
+- **SDK: `normalize()`, `detectScenes()`, `contentHash()`, and `contentHashOfNormalized()` accept a `Uint8Array` without silent corruption.** The Node reference implementation decoded input via `Buffer.prototype.toString('utf8')`; a plain `Uint8Array` (as returned by `fetch()`/File APIs) was silently mis-decoded to comma-joined byte values, producing a valid-looking but meaningless `contentHash` and zero detected scenes, with no error raised. The affected functions now coerce to `Buffer` at entry and accept `Uint8Array | Buffer`; output for a `Buffer` input is byte-for-byte unchanged. This matches the cross-runtime `src/shared` implementation, which was already `Uint8Array`-native.
+- **CLI: `decrypt-field` honors `--password`** (with the same argv-exposure warning as `register`). Previously the flag was silently ignored and the command fell through to an interactive prompt, failing with a misleading authentication error in non-interactive use.
+
 ## [0.2.0] — Browser-native register + PDF input
 
 The v0.1.0 reference shipped CLI-only. v0.2 makes the protocol usable from a browser tab and lays in the PDF-as-source flow without changing any commitment-bearing surface.

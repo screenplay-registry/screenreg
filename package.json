@@ -1,6 +1,6 @@
 {
   "name": "screenreg",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reference implementation of The Screenplay Registry — a free, open, cryptographically verifiable timestamp for screenplays anchored to Bitcoin via OpenTimestamps.",
   "license": "MIT",
   "author": "Rufus Xavier <protocol@screenplayregistry.org>",
