@@ -148,7 +148,7 @@ export {
   type FormatComparisonReportOptions,
 } from './similarity/jaccard.js'
 
-// ---- OTS anchoring (Python helper required for submit; verify is pure JS) ----
+// ---- OTS anchoring (pure-TS calendar submit + verify; no Python, no native deps) ----
 export { submitOts } from './anchors/ots-submit.js'
 export { verifyOtsAgainstFileDigest, parseOts } from './anchors/ots-verify.js'
 

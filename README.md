@@ -86,7 +86,7 @@ See [`docs/threat-model.md`](docs/threat-model.md) for the precise guarantees an
 
 ### In the browser (recommended)
 
-Drop your screenplay — a `.pdf`, `.fountain`, or plain text — at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page reads and hashes the file locally (a PDF is converted to text right in your browser), sends only the 32-byte claim hash to public OpenTimestamps calendars, and gives you back a single **`.screenreg`** file: your screenplay, the registration record, and the timestamp proof in one file — plus a shareable proof-only version that omits the script. The proof is usable immediately as a pending calendar attestation; the Bitcoin confirmation becomes available about 1–6 hours later, and the page hands you the finalized `.screenreg` once it lands. The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
+Drop your screenplay — a `.pdf`, `.fountain`, or plain text — at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page reads and hashes the file locally (a PDF is converted to text right in your browser), sends only a 32-byte nonce-blinded commitment — never the claim hash itself — to public OpenTimestamps calendars, and gives you back a single **`.screenreg`** file: your screenplay, the registration record, and the timestamp proof in one file — plus a shareable proof-only version that omits the script. The proof is usable immediately as a pending calendar attestation; the Bitcoin confirmation becomes available about 1–6 hours later, and the page hands you the finalized `.screenreg` once it lands. The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
 
 Verify any registered proof at [**screenplayregistry.org/verify/**](https://screenplayregistry.org/verify/) by drag-dropping the `.screenreg` (a proof-only file verifies the date; add the screenplay to also confirm the contents). Verification is entirely offline; the page never contacts the protocol's servers.
 
@@ -95,11 +95,10 @@ Verify any registered proof at [**screenplayregistry.org/verify/**](https://scre
 ### From the command line
 
 ```bash
-# Clone + install
+# Clone + install (Node ≥20 — that's all; no Python, no native deps)
 git clone https://github.com/screenplay-registry/screenreg.git
 cd screenreg
 npm install
-python3 -m venv .venv && .venv/bin/pip install opentimestamps opentimestamps-client
 
 # Register a Fountain screenplay → ONE self-contained file
 ./bin/screenreg.mjs register my-screenplay.fountain
@@ -201,7 +200,7 @@ These never change. Brand-related names (CLI command, package/repository name, f
 /src/envelope/               envelope construction + canonicalization + claim hash
 /src/merkle/                 scene-tree Merkle implementation
 /src/encrypt/                encrypted-field layer
-/src/anchors/                OTS adapter (Python helper + clean-room TS verifier)
+/src/anchors/                OTS adapter (clean-room TS calendar submit + verifier) + Bitcoin SPV
 /src/cli/                    CLI entry point
 /test/                       vitest tests for core behavior, CLI flows, and adversarial cases
 /verifier-web/               browser-native drag-and-drop verifier (single HTML+JS)
@@ -222,7 +221,7 @@ These never change. Brand-related names (CLI command, package/repository name, f
 
 ### v0.1 (initial public release — shipped)
 - Core spec + reference TypeScript implementation
-- Python helper for OTS calendar submission
+- Clean-room TypeScript OTS calendar submission + verification (no native deps)
 - CLI: register / verify / diagnose / similarity / disclose-comparison / verify-registration / scene-prove / decrypt-field / timelock-encrypt / timelock-decrypt + 6 more
 - Browser-native drag-and-drop verifier
 - 80+ adversarial test vectors per layer; 368 passing tests

@@ -53,7 +53,7 @@
     "TESTVECTORS-LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-dist-assets.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",

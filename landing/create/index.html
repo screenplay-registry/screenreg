@@ -406,7 +406,7 @@
 
   <div id="inputArea">
   <p class="lede">
-    Drop your screenplay below — a <span class="mono">.pdf</span>, <span class="mono">.fountain</span>, or plain text. Your computer reads and hashes it locally, and only the 32-byte fingerprint is sent to public Bitcoin-timestamping calendars. The script content never leaves your browser.
+    Drop your screenplay below — a <span class="mono">.pdf</span>, <span class="mono">.fountain</span>, or plain text. Your computer reads and hashes it locally, and only a tiny 32-byte timestamping commitment is sent to public Bitcoin-timestamping calendars. The script content never leaves your browser.
   </p>
 
   <label class="drop" id="dropZone">
@@ -417,7 +417,7 @@
   </label>
 
   <p class="privacy-note">
-    <strong>Privacy.</strong> Hashing runs entirely in this tab. The 32-byte SHA-256 fingerprint is the only thing about your screenplay that ever leaves your machine, and it goes only to the OpenTimestamps public calendars listed below. While the proof settles, this page periodically re-asks those same calendars whether Bitcoin has confirmed it yet — the same destinations and the same fingerprint, nothing more. Your script, title, and author never leave (the title and author go out only as ciphertext, and only if you choose to embed them).
+    <strong>Privacy.</strong> Hashing runs entirely in this tab. The only thing about your screenplay that ever leaves your machine is a 32-byte timestamping commitment — your script's fingerprint mixed with a fresh random value and hashed again, so the calendars never even see the fingerprint itself, just an unlinkable commitment — and it goes only to the OpenTimestamps public calendars listed below. While the proof settles, this page periodically re-asks those same calendars whether Bitcoin has confirmed it yet — the same destinations and the same commitment, nothing more. Your script, title, and author never leave (the title and author go out only as ciphertext, and only if you choose to embed them).
   </p>
 
   <div class="options" style="margin: 28px 0 12px;">

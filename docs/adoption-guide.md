@@ -97,7 +97,7 @@ async function registerScreenplay(fountainBytes: Buffer): Promise<{ envelope: an
 }
 ```
 
-The SDK is pure TypeScript (zero deps for normalize/canonicalize/merkle/encrypt; the OTS submit path subprocesses a Python helper, which requires `opentimestamps` installed on the system).
+The SDK is pure TypeScript with no native dependencies and no Python: normalize/canonicalize/merkle/encrypt are zero-dep, and the OTS calendar submit + verification use only `globalThis.fetch` and Web Crypto (Node ≥20 or any evergreen browser).
 
 ### Path D: shell out to the CLI from a worker (for SaaS)
 

@@ -9,7 +9,7 @@
 import { normalize, contentHashOfNormalized, PROFILE_ID as NORM_PROFILE_ID } from './lib/normalize/v1-strict.js'
 import { buildCommittedClaim, buildEnvelope } from './lib/envelope/build.js'
 import { computeClaimHash, computeClaimHashBytes } from './lib/envelope/claim-hash.js'
-import { buildOtsBytes, isValidTimestampSubtree } from './lib/anchors/ots-build.js'
+import { submitDigestToCalendars } from './lib/anchors/ots-submit.js'
 import { buildEncryptedFieldsBlock } from './lib/encrypt/fields.js'
 import { CLAIM_VERSION } from './lib/envelope/types.js'
 import { detectScenes, buildSceneTree } from './lib/merkle/scene-tree.js'
@@ -190,47 +190,6 @@ async function readFileBytes(file) {
   })
 }
 
-async function submitToCalendar(url, digestBytes) {
-  // text/plain keeps the request inside the CORS "simple request" set — no
-  // preflight required. All four public OTS calendars return
-  // access-control-allow-origin: *.
-  const ctrl = new AbortController()
-  const timeoutId = setTimeout(() => ctrl.abort(new Error('timeout')), PER_CALENDAR_TIMEOUT_MS)
-  try {
-    const resp = await fetch(`${url}/digest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: digestBytes,
-      mode: 'cors',
-      cache: 'no-store',
-      referrerPolicy: 'no-referrer',
-      signal: ctrl.signal,
-    })
-    if (!resp.ok) {
-      return { url, ok: false, error: `HTTP ${resp.status}` }
-    }
-    const ctype = resp.headers.get('content-type') || ''
-    if (ctype && !/octet-stream|opentimestamps/i.test(ctype)) {
-      return { url, ok: false, error: `unexpected content-type ${ctype}` }
-    }
-    const buf = await resp.arrayBuffer()
-    const bytes = new Uint8Array(buf)
-    if (!isValidTimestampSubtree(bytes)) {
-      return { url, ok: false, error: `response is not a valid OTS Timestamp sub-tree (${bytes.length} bytes)` }
-    }
-    return { url, ok: true, bytes }
-  } catch (err) {
-    const reason = err && err.name === 'AbortError'
-      ? `timed out after ${PER_CALENDAR_TIMEOUT_MS / 1000}s`
-      : err && err.message
-        ? err.message
-        : String(err)
-    return { url, ok: false, error: reason }
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
-
 async function run() {
   // Snapshot the file at run-start so a second selection in the middle of the
   // async pipeline (drop, file-input change) cannot mint a proof that points
@@ -352,29 +311,25 @@ async function run() {
     const shareSerial = 'screenreg-' + claimHash.replace(/^sha256:/, '').slice(0, 12)
     const outName = keepPrivate ? shareSerial : sourceName
 
-    // Step 5 — submit to calendars
+    // Step 5 — submit to calendars (shared engine; the CLI uses the same one).
     setStep('calendars', 'active', `submitting to ${CALENDARS.length} calendars in parallel (${PER_CALENDAR_TIMEOUT_MS / 1000}s timeout each)…`)
     for (const url of CALENDARS) setCalendarRow(url, 'pending', 'pending')
-    // allSettled never throws and never hangs because each fetch has its own
-    // AbortController-backed timeout. Per-row UI updates happen as each
-    // promise resolves.
-    const submissions = await Promise.allSettled(
-      CALENDARS.map(async (url) => {
-        const r = await submitToCalendar(url, claimHashBytes)
-        if (r.ok) {
-          setCalendarRow(url, 'ok', `${r.bytes.length}B`)
-        } else {
-          setCalendarRow(url, 'err', 'failed', r.error)
-        }
-        return r
-      }),
-    )
-    const settled = submissions.map((s) => s.status === 'fulfilled' ? s.value : { ok: false, error: 'unexpected' })
-    const successful = settled.filter((r) => r.ok)
-    if (successful.length < MIN_CALENDARS_REQUIRED) {
-      throw new Error(
-        `Only ${successful.length} of ${CALENDARS.length} calendars accepted the digest (need ≥${MIN_CALENDARS_REQUIRED}). Try again in a minute, or fall back to the screenreg CLI.`,
-      )
+    // Each calendar has its own AbortController-backed timeout, so this never
+    // hangs; onResult drives the per-row UI as each resolves.
+    const sub = await submitDigestToCalendars({
+      fileDigest: claimHashBytes,
+      calendars: CALENDARS,
+      minCalendars: MIN_CALENDARS_REQUIRED,
+      timeoutMs: PER_CALENDAR_TIMEOUT_MS,
+      onResult: (r) => {
+        if (r.ok) setCalendarRow(r.url, 'ok', `${r.bytes.length}B`)
+        else setCalendarRow(r.url, 'err', 'failed', r.error)
+      },
+    })
+    const successful = sub.results.filter((r) => r.ok)
+    if (!sub.ok) {
+      const reason = sub.reason.charAt(0).toUpperCase() + sub.reason.slice(1)
+      throw new Error(`${reason}. Try again in a minute, or fall back to the screenreg CLI.`)
     }
     setStep(
       'calendars',
@@ -382,12 +337,9 @@ async function run() {
       `${successful.length} of ${CALENDARS.length} calendars accepted the digest`,
     )
 
-    // Step 6 — assemble .ots
+    // Step 6 — assemble .ots (the shared engine already assembled it)
     setStep('ots', 'active', 'building proof bytes…')
-    const otsBytes = buildOtsBytes({
-      fileDigest: claimHashBytes,
-      calendarTimestamps: successful.map((r) => r.bytes),
-    })
+    const otsBytes = sub.otsBytes
     setStep('ots', 'done', `${otsBytes.length} bytes`)
 
     // Build the envelope manifest — derive names from the snapshotted file,

@@ -38,9 +38,8 @@ For these, the COMMITMENT shape itself is sacred — backward compatibility for 
 git clone https://github.com/screenplay-registry/screenreg.git
 cd screenreg
 
-# 2. Install dependencies
+# 2. Install dependencies (Node ≥20 — no Python, no native deps)
 npm install
-python3 -m venv .venv && .venv/bin/pip install opentimestamps opentimestamps-client
 
 # 3. Run tests
 npm test           # vitest, all
@@ -67,7 +66,7 @@ npx tsx scripts/generate-scene-tree-corpus.ts
 
 - TypeScript strict mode (already configured in `tsconfig.json`).
 - Avoid dependencies in `/src/normalize/`, `/src/envelope/`, `/src/merkle/` — these are the commitment-bearing modules and must remain pure-TS / Node-builtin only.
-- `/src/anchors/` is allowed to subprocess Python (the helper script); a future release may replace it with a clean-room TS calendar submitter.
+- `/src/anchors/` is clean-room TypeScript end to end — calendar submission, `.ots` verification, and Bitcoin SPV — using only `globalThis.fetch` and Web Crypto. No Python, no native deps.
 
 ## Reporting security issues
 

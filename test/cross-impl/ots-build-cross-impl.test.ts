@@ -199,6 +199,46 @@ describe('buildOtsBytes: fixed-byte structure', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Blinding (nonce): OP_APPEND(nonce)+OP_SHA256 after the digest
+// ---------------------------------------------------------------------------
+
+describe('buildOtsBytes: blinding nonce', () => {
+  const digest = new Uint8Array(32).fill(0x5a)
+  const nonce = new Uint8Array(16).fill(0x11)
+
+  it('inserts OP_APPEND(nonce)+OP_SHA256 after the digest; fileDigest stays the claim hash', () => {
+    const cals = [pendingResponse('https://a/'), pendingResponse('https://b/')]
+    const built = buildOtsBytes({ fileDigest: digest, calendarTimestamps: cals, nonce })
+    // magic(31)+ver(1)+OP_SHA256(1)+digest(32) = 65, then OP_APPEND, varuint(16), nonce, OP_SHA256
+    expect(built[65]).toBe(0xf0)
+    expect(built[66]).toBe(0x10)
+    for (let i = 0; i < 16; i++) expect(built[67 + i]).toBe(nonce[i])
+    expect(built[67 + 16]).toBe(0x08)
+    const parsed = parseOts(Buffer.from(built))
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.parsed.fileDigestHex).toBe(Buffer.from(digest).toString('hex'))
+      expect(parsed.parsed.attestations.length).toBe(2)
+    }
+  })
+
+  it('round-trips: split → rebuild is byte-identical for a blinded proof', () => {
+    const cals = [pendingResponse('https://a/'), pendingResponse('https://b/')]
+    const built = buildOtsBytes({ fileDigest: digest, calendarTimestamps: cals, nonce })
+    const split = splitOtsForRoundTrip(built)
+    expect(Buffer.from(split.fileDigest).equals(Buffer.from(digest))).toBe(true)
+    const rebuilt = buildOtsBytes({ fileDigest: split.fileDigest, calendarTimestamps: split.calendarTimestamps })
+    expect(Buffer.from(rebuilt).equals(Buffer.from(built))).toBe(true)
+  })
+
+  it('rejects an out-of-range nonce', () => {
+    const cal = pendingResponse('https://a/')
+    expect(() => buildOtsBytes({ fileDigest: digest, calendarTimestamps: [cal], nonce: new Uint8Array(0) })).toThrow(/nonce/)
+    expect(() => buildOtsBytes({ fileDigest: digest, calendarTimestamps: [cal], nonce: new Uint8Array(65) })).toThrow(/nonce/)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Generated multi-calendar builds — parser sees all N attestations
 // ---------------------------------------------------------------------------
 

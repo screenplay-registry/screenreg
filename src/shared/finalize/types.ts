@@ -1,8 +1,9 @@
 /**
  * Public types for the "finalize" layer.
  *
- * Registration is two-phase by nature: submitting a claim hash to the
- * OpenTimestamps calendars returns a *pending* proof in about a minute, but the
+ * Registration is two-phase by nature: submitting a nonce-blinded commitment of
+ * the claim hash to the OpenTimestamps calendars returns a *pending* proof in
+ * about a minute (the calendars hold that commitment, not the claim hash), but the
  * Bitcoin confirmation that makes the proof self-contained only lands once the
  * calendar's aggregation batch is mined and buried (typically 1–6 hours later).
  * "Finalize" is the act of folding that Bitcoin attestation into the `.ots` —

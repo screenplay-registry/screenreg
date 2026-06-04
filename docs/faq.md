@@ -43,7 +43,7 @@ PDFs the reference extractor cannot handle (scanned image-only, password-encrypt
 
 ## What does "Bitcoin-anchored" mean in plain English?
 
-When you register, a 32-byte claim hash — the SHA-256 of your canonicalized claim — goes through a public OpenTimestamps "calendar" server. The calendar batches thousands of fingerprints from different people into one cryptographic tree, and puts only the tree's root into a Bitcoin transaction. Bitcoin's distributed ledger then records that root permanently. Anyone with your `.ots` proof file can later check that your specific fingerprint was part of the tree that was committed in that Bitcoin block — proving your fingerprint existed by the block's timestamp.
+When you register, a 32-byte commitment — a nonce-blinded hash of your claim hash (the SHA-256 of your canonicalized claim), so the calendar never sees the claim hash itself — goes through a public OpenTimestamps "calendar" server. The calendar batches thousands of these commitments from different people into one cryptographic tree, and puts only the tree's root into a Bitcoin transaction. Bitcoin's distributed ledger then records that root permanently. Anyone with your `.ots` proof file can later check that your claim hash (via that blinded commitment) was part of the tree committed in that Bitcoin block — proving your claim existed by the block's timestamp.
 
 You never see Bitcoin, and you never pay any fee. The calendar operators pay the Bitcoin transaction fee themselves as a public-good service (the per-fingerprint marginal cost is fractions of a cent).
 

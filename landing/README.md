@@ -3,7 +3,7 @@
 What's deployed:
 
 - `index.html` — the marketing landing page (editorial RFC aesthetic, browser-first CTAs).
-- `create/` — the browser-native register page. Drag a `.fountain` file, get back a `manifest.json` + `proof.ots`. Script content never leaves the tab; only the 32-byte SHA-256 claim hash goes to the OpenTimestamps public calendars.
+- `create/` — the browser-native register page. Drag a `.fountain` file, get back a `manifest.json` + `proof.ots`. Script content never leaves the tab; only a 32-byte nonce-blinded commitment (not the claim hash itself) goes to the OpenTimestamps public calendars.
 - `create/lib/` — compiled cross-runtime ES modules from `src/shared/`. Regenerate with `npm run build:browser` from the repo root.
 - `_headers` — Cloudflare Pages security headers (CSP, HSTS, no-referrer, Permissions-Policy locking down sensors, COOP/CORP, X-Frame-Options DENY).
 

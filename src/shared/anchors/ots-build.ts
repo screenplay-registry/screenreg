@@ -50,6 +50,7 @@ const HEADER_MAGIC = new Uint8Array([
 ])
 const MAJOR_VERSION = 1
 const OP_SHA256 = 0x08
+const OP_APPEND = 0xf0
 const FORK_MARKER = 0xff
 
 /**
@@ -391,6 +392,15 @@ export interface BuildOtsInput {
    * contents (the parser does that on read-back).
    */
   calendarTimestamps: Uint8Array[]
+  /**
+   * Optional blinding nonce. When set, the tree commits `fileDigest` via
+   * `OP_APPEND(nonce) → OP_SHA256` so the calendars attest to the blinded value
+   * `SHA256(fileDigest ‖ nonce)` rather than the (public) fileDigest itself —
+   * the upstream-OTS standard. The calendar responses in `calendarTimestamps`
+   * MUST be the responses to that blinded value. Verification and finalize are
+   * unaffected: both walk from `fileDigest` through these ops.
+   */
+  nonce?: Uint8Array
 }
 
 /**
@@ -433,6 +443,17 @@ export function buildOtsBytes(input: BuildOtsInput): Uint8Array {
     new Uint8Array([OP_SHA256]),
     input.fileDigest,
   ]
+
+  // Optional blinding: OP_APPEND(nonce) then OP_SHA256, so the calendars (and
+  // anyone watching their traffic) only ever see SHA256(fileDigest ‖ nonce), not
+  // the public fileDigest. The arg is a varbytes (varuint length + bytes); cap
+  // mirrors the strict walker's MAX_BINARY_OP_ARG_LENGTH.
+  if (input.nonce !== undefined) {
+    if (!(input.nonce instanceof Uint8Array) || input.nonce.length < 1 || input.nonce.length > 64) {
+      throw new Error(`buildOtsBytes: nonce must be 1..64 bytes, got ${input.nonce?.length}`)
+    }
+    parts.push(new Uint8Array([OP_APPEND]), encodeVarUint(input.nonce.length), input.nonce, new Uint8Array([OP_SHA256]))
+  }
 
   // All calendar responses except the last get prefixed with the fork marker.
   // The final one is the "terminal" branch and is appended directly.
