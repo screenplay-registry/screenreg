@@ -154,8 +154,8 @@ class Reader {
 // ---------------------------------------------------------------------------
 
 export type ParsedAttestation =
-  | { kind: 'bitcoin'; blockHeight: number }
-  | { kind: 'litecoin'; blockHeight: number }
+  | { kind: 'bitcoin'; blockHeight: number; merkleRoot: string }
+  | { kind: 'litecoin'; blockHeight: number; merkleRoot: string }
   | { kind: 'pending'; calendarUrl: string }
   | { kind: 'unknown'; tag: string; payloadHex: string }
 
@@ -272,7 +272,12 @@ function walkTimestamp(
         )
       }
       const payload = r.readBytes(payloadLen)
-      attestations.push(parseAttestation(attTag, payload))
+      // `msg` at the attestation point is the value the attestation commits to.
+      // For a Bitcoin block-header attestation that value IS the block's merkle
+      // root, in INTERNAL (little-endian) byte order — the same order it appears
+      // in the serialized 80-byte header. SPV verification compares it against
+      // the real block header (see verifyAttestationAgainstHeader in bitcoin-spv.ts).
+      attestations.push(parseAttestation(attTag, payload, msg))
       return
     }
     // Otherwise this is an op tag
@@ -368,16 +373,24 @@ function applyOp(opTag: number, r: Reader, msg: Buffer): Buffer {
   }
 }
 
-function parseAttestation(tag: Buffer, payload: Buffer): ParsedAttestation {
+function parseAttestation(tag: Buffer, payload: Buffer, msg: Buffer): ParsedAttestation {
   if (tag.equals(TAG_BITCOIN_BLOCK_HEADER)) {
     const r = new Reader(payload)
     const blockHeight = r.readVarUint()
-    return { kind: 'bitcoin', blockHeight }
+    // A Bitcoin attestation payload is exactly the varint height; reject trailing
+    // bytes to match the builder's strict-walker semantics.
+    if (!r.eof()) {
+      throw new Error(`bitcoin attestation payload has ${r.remaining()} trailing bytes past the height`)
+    }
+    return { kind: 'bitcoin', blockHeight, merkleRoot: msg.toString('hex') }
   }
   if (tag.equals(TAG_LITECOIN_BLOCK_HEADER)) {
     const r = new Reader(payload)
     const blockHeight = r.readVarUint()
-    return { kind: 'litecoin', blockHeight }
+    if (!r.eof()) {
+      throw new Error(`litecoin attestation payload has ${r.remaining()} trailing bytes past the height`)
+    }
+    return { kind: 'litecoin', blockHeight, merkleRoot: msg.toString('hex') }
   }
   if (tag.equals(TAG_PENDING)) {
     const r = new Reader(payload)
@@ -417,6 +430,13 @@ export interface VerifyOtsAgainstClaimHashInput {
   expectedFileDigest: Buffer
 }
 
+/** A Bitcoin attestation: the block height plus the merkle root it commits to. */
+export interface BitcoinAttestation {
+  blockHeight: number
+  /** Block merkle root in INTERNAL (little-endian) byte order, hex. */
+  merkleRoot: string
+}
+
 export type VerifyOtsAgainstClaimHashResult =
   | {
       ok: true
@@ -424,6 +444,8 @@ export type VerifyOtsAgainstClaimHashResult =
       /** True if at least one attestation is a confirmed Bitcoin attestation. */
       bitcoinAnchored: boolean
       bitcoinBlockHeights: number[]
+      /** Bitcoin attestations with their committed merkle roots (for SPV header checks). */
+      bitcoinAttestations: BitcoinAttestation[]
       pendingCalendarUrls: string[]
     }
   | { ok: false; reason: string }
@@ -451,16 +473,20 @@ export function verifyOtsAgainstFileDigest(input: VerifyOtsAgainstClaimHashInput
     }
   }
   const bitcoinHeights: number[] = []
+  const bitcoinAttestations: BitcoinAttestation[] = []
   const pendingUrls: string[] = []
   for (const att of parsed.parsed.attestations) {
-    if (att.kind === 'bitcoin') bitcoinHeights.push(att.blockHeight)
-    else if (att.kind === 'pending') pendingUrls.push(att.calendarUrl)
+    if (att.kind === 'bitcoin') {
+      bitcoinHeights.push(att.blockHeight)
+      bitcoinAttestations.push({ blockHeight: att.blockHeight, merkleRoot: att.merkleRoot })
+    } else if (att.kind === 'pending') pendingUrls.push(att.calendarUrl)
   }
   return {
     ok: true,
     parsed: parsed.parsed,
     bitcoinAnchored: bitcoinHeights.length > 0,
     bitcoinBlockHeights: bitcoinHeights,
+    bitcoinAttestations,
     pendingCalendarUrls: pendingUrls,
   }
 }
