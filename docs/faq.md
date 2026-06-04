@@ -73,6 +73,27 @@ The protocol explicitly DOES NOT depend on any particular calendar operator's co
 
 Then your proof loses its anchor — Bitcoin block headers wouldn't be verifiable. This is a multi-decade tail risk. By the time it's a realistic threat, the protocol will have additional parallel anchors (an optional Ethereum-mainnet anchor, Sigstore-style logs, etc.) — additive, not replacements, and never a priority source — so you can have a single registration that anchors to MULTIPLE chains. As long as ONE survives, the proof verifies.
 
+## What can someone who has my proof actually see?
+
+It depends which file you hand them — and that's exactly why there are two.
+
+**The proof-only file (`.evidence.screenreg`)** — the one meant for sharing — reveals almost nothing about your script. Someone who holds it can see:
+
+- two fingerprints (the content hash and the claim hash) — one-way SHA-256 hashes that cannot be reversed into your text;
+- structural counts: how many scenes and how many paragraphs (e.g. "226 scenes"), plus the Merkle-tree *roots* (single hashes — not the per-scene contents);
+- the date your fingerprint was timestamped (once it's Bitcoin-anchored);
+- your AI-training preference, if you set one;
+- a pseudonymous Ed25519 public key, if you chose to sign the registration (a key, not your name);
+- a pointer to an earlier registration, if you filed this one as a revision.
+
+It does **not** reveal your screenplay's text, title, or author. There is no plaintext title or author field anywhere in a registration — so a proof-only file is safe to post publicly or hand to a studio: it proves "a document with this fingerprint existed by this date," and nothing more.
+
+**The full file (`.screenreg`)** — your private keep-copy — additionally embeds the screenplay text itself, so anyone you give it to can read the whole script. Keep this one; share only the `.evidence` version.
+
+**Encrypted title/author:** if you turned on "keep the title and author private," those are stored as AES-256-GCM ciphertext. They are present in the file but unreadable without your password — verification never displays them (the field *names*, "title"/"author", are visible; the values are not).
+
+**Can someone test "does your script contain this exact scene?" against a proof?** No — not from a proof alone. A registration commits only the tree *roots*, never the per-scene leaves, so there is nothing to query. That kind of comparison is possible only if you deliberately opt in by publishing a comparison bundle — see "Doesn't publishing my registration let anyone test…" below, and [the threat model](threat-model.md).
+
 ## Can I register my screenplay anonymously?
 
 **Yes — and you do by default.** The protocol does not bind your real-world identity to a registration in v1. The hash that goes to Bitcoin is just 32 bytes of randomness from Bitcoin's perspective; nothing identifies you.
