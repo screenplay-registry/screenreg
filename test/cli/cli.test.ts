@@ -55,7 +55,7 @@ describe('CLI: register + verify (mock mode, no network)', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
 
-    const register = runCli(['register', scriptPath, '--mock'])
+    const register = runCli(['register', scriptPath, '--mock', '--loose'])
     expect(register.code).toBe(0)
     expect(register.stderr).toMatch(/Registration complete/)
 
@@ -86,7 +86,7 @@ describe('CLI: register + verify (mock mode, no network)', () => {
       scriptPath,
       'Title: Test\n\nINT. KITCHEN - DAY\n\nA scene.\n\nINT. BEDROOM - NIGHT\n\nAnother scene.\n',
     )
-    const register = runCli(['register', '--mock', scriptPath])
+    const register = runCli(['register', '--mock', scriptPath, '--loose'])
     expect(register.code).toBe(0)
     const verify = runCli(['verify', '--require-bitcoin-anchor', scriptPath, envelopePath, otsPath])
     expect(verify.code).toBe(2)
@@ -96,7 +96,7 @@ describe('CLI: register + verify (mock mode, no network)', () => {
   it('verify FAILS for a tampered file', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
-    const register = runCli(['register', scriptPath, '--mock'])
+    const register = runCli(['register', scriptPath, '--mock', '--loose'])
     expect(register.code).toBe(0)
 
     // Tamper
@@ -127,7 +127,7 @@ describe('CLI: register + verify (mock mode, no network)', () => {
   it('diagnose with manifest reports MISMATCH for an edited file', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
-    const register = runCli(['register', scriptPath, '--mock'])
+    const register = runCli(['register', scriptPath, '--mock', '--loose'])
     expect(register.code).toBe(0)
 
     appendFileSync(scriptPath, '\nEXTRA\n')
@@ -152,7 +152,7 @@ describe('CLI: encrypted fields', () => {
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
 
     const register = runCli(
-      ['register', scriptPath, '--mock', '--encrypt-title', 'My Great Movie'],
+      ['register', scriptPath, '--mock', '--loose', '--encrypt-title', 'My Great Movie'],
       { SCREENREG_PASSWORD: 'hunter2' },
     )
     expect(register.code).toBe(0)
@@ -168,7 +168,7 @@ describe('CLI: encrypted fields', () => {
   it('decrypt-field with wrong password fails', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
-    runCli(['register', scriptPath, '--mock', '--encrypt-title', 'Secret'], { SCREENREG_PASSWORD: 'right' })
+    runCli(['register', scriptPath, '--mock', '--loose', '--encrypt-title', 'Secret'], { SCREENREG_PASSWORD: 'right' })
 
     const decrypt = runCli(['decrypt-field', `${scriptPath}.manifest.json`, 'title'], {
       SCREENREG_PASSWORD: 'wrong',
@@ -188,7 +188,7 @@ describe('CLI: scene-prove + scene-verify', () => {
   it('scene-prove generates a proof; scene-verify confirms it', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE_FOUNTAIN)
-    runCli(['register', scriptPath, '--mock'])
+    runCli(['register', scriptPath, '--mock', '--loose'])
 
     const proveResult = runCli(['scene-prove', scriptPath, `${scriptPath}.manifest.json`, '0'])
     expect(proveResult.code).toBe(0)

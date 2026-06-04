@@ -2,10 +2,10 @@
  * The Screenplay Registry — CLI entry point.
  *
  * Subcommands:
- *   register <file>            — normalize, build claim, stamp via OTS, emit envelope + .ots
- *   verify <file> <env> <ots>  — binary OK/FAILED verification
+ *   register <file>            — normalize, build claim, stamp via OTS, emit one .screenreg (--evidence adds a shareable twin; --loose for separate files)
+ *   verify <file.screenreg> | <file> <env> <ots>  — binary OK/FAILED verification
  *   diagnose <file> [env] [ots] — honest transform analysis (mode matrix per spec §6)
- *   finalize <ots>             — fold in the Bitcoin attestation once confirmed (alias: upgrade)
+ *   finalize <ots|.screenreg> — fold in the Bitcoin attestation once confirmed (alias: upgrade)
  *   normalize <file>           — debug: print normalized bytes + hash
  *   claim <file>               — debug: build committedClaim + print claimHash
  *   scene-prove <file> <env> <sceneIndex>  — generate selective-disclosure proof
@@ -172,6 +172,16 @@ function getEnvelopeOutputPath(inputFile: string): string {
 function getOtsOutputPath(inputFile: string): string {
   const base = basename(inputFile)
   return join(dirname(inputFile), `${base}.proof.ots`)
+}
+
+function getScreenregOutputPath(inputFile: string): string {
+  const base = basename(inputFile).replace(/\.(fountain|txt)$/i, '')
+  return join(dirname(inputFile), `${base}.screenreg`)
+}
+
+function getEvidenceScreenregOutputPath(inputFile: string): string {
+  const base = basename(inputFile).replace(/\.(fountain|txt)$/i, '')
+  return join(dirname(inputFile), `${base}.evidence.screenreg`)
 }
 
 /**
@@ -370,6 +380,13 @@ interface RegisterOptions {
   trainingMining?: 'allowed' | 'notAllowed' | 'constrained'
   noSceneTree?: boolean
   mock?: boolean
+  /** Emit the loose manifest + .ots (+ .pem) instead of a single .screenreg (integrator path). */
+  loose?: boolean
+  /**
+   * Additionally emit a proof-only `.evidence.screenreg` (no screenplay) next to the
+   * full bundle, mirroring the browser's keep-file + shareable-file pair. Default mode only.
+   */
+  evidence?: boolean
   envelopeOut?: string
   otsOut?: string
   password?: string
@@ -389,6 +406,15 @@ interface RegisterOptions {
 }
 
 async function cmdRegister(opts: RegisterOptions): Promise<void> {
+  // Validate flag combinations BEFORE any stamping, key generation, or sidecar
+  // writes — a rejected invocation must never leave a private key or comparison
+  // bundle on disk. --evidence (the proof-only twin of the single-file default)
+  // is meaningless alongside the loose separate-files output.
+  const looseMode = !!opts.loose || opts.envelopeOut !== undefined || opts.otsOut !== undefined
+  if (opts.evidence && looseMode) {
+    die('register: --evidence emits a proof-only .screenreg and is incompatible with --loose / --envelope-out / --ots-out')
+  }
+
   const raw = readScreenplayBounded(opts.inputFile)
   const normResult = normalize(raw)
   if (!normResult.ok) die(`normalization failed: ${normResult.detail}`)
@@ -484,7 +510,6 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
   }
 
   const otsOutputPath = opts.otsOut ?? getOtsOutputPath(opts.inputFile)
-  writeFileSync(otsOutputPath, stampResult.otsBytes)
 
   // Save the private comparison-disclosure data (the leaves) to a sidecar file.
   // This file is NEVER part of the public registration; the writer keeps it
@@ -551,17 +576,54 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
     bundleExtensions,
   })
 
-  const envelopeOutputPath = opts.envelopeOut ?? getEnvelopeOutputPath(opts.inputFile)
-  writeFileSync(envelopeOutputPath, JSON.stringify(envelope, null, 2) + '\n')
-
+  // Output. By default, emit a single self-contained .screenreg (full bundle, embedding the
+  // source). Integrators who pass --loose / --envelope-out / --ots-out get the loose manifest +
+  // .ots instead. The private .pem (if --identity) and comparison bundle are always separate
+  // sidecars — a private key and membership-oracle leaves never belong in a one-file deliverable.
   process.stderr.write(`\n✓ Registration complete.\n`)
   process.stderr.write(`  Claim hash: ${claimHash}\n`)
-  process.stderr.write(`  Envelope:   ${envelopeOutputPath}\n`)
-  process.stderr.write(`  OTS proof:  ${otsOutputPath}\n`)
+  if (looseMode) {
+    writeFileSync(otsOutputPath, stampResult.otsBytes)
+    const envelopeOutputPath = opts.envelopeOut ?? getEnvelopeOutputPath(opts.inputFile)
+    writeFileSync(envelopeOutputPath, JSON.stringify(envelope, null, 2) + '\n')
+    process.stderr.write(`  Envelope:   ${envelopeOutputPath}\n`)
+    process.stderr.write(`  OTS proof:  ${otsOutputPath}\n`)
+  } else {
+    const bundlePath = getScreenregOutputPath(opts.inputFile)
+    let bundle: Uint8Array
+    try {
+      bundle = await buildScreenreg({
+        envelope: envelope as unknown as SharedEnvelope,
+        otsBytes: stampResult.otsBytes,
+        sourceText: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength),
+      })
+    } catch (err) {
+      die(`register: could not assemble .screenreg: ${err instanceof ScreenregError ? err.message : String(err)}`)
+    }
+    writeFileSync(bundlePath, bundle)
+    process.stderr.write(`  Bundle:     ${bundlePath} (${bundle.length} bytes — your screenplay + proof in one file)\n`)
+    if (opts.evidence) {
+      // The shareable proof-only twin: same claim + proof, no screenplay text. Mirrors the
+      // browser handing the user both a keep-file and a send-file.
+      let evidenceBundle: Uint8Array
+      try {
+        evidenceBundle = await buildEvidenceScreenreg({
+          envelope: envelope as unknown as SharedEnvelope,
+          otsBytes: stampResult.otsBytes,
+        })
+      } catch (err) {
+        die(`register: could not assemble the evidence .screenreg: ${err instanceof ScreenregError ? err.message : String(err)}`)
+      }
+      const evidencePath = getEvidenceScreenregOutputPath(opts.inputFile)
+      writeFileSync(evidencePath, evidenceBundle)
+      process.stderr.write(`  Shareable:  ${evidencePath} (${evidenceBundle.length} bytes — proof only, no screenplay; safe to send)\n`)
+    }
+  }
   if (opts.mock) {
     process.stderr.write(`  (Mock mode — proof is a placeholder, not anchored to Bitcoin.)\n`)
   } else {
-    process.stderr.write(`  Bitcoin confirmation typically takes 1-6 hours. Run \`${CLI_NAME} finalize ${otsOutputPath}\` later.\n`)
+    const finalizeArg = looseMode ? otsOutputPath : getScreenregOutputPath(opts.inputFile)
+    process.stderr.write(`  Bitcoin confirmation typically takes 1-6 hours. Run \`${CLI_NAME} finalize ${finalizeArg}\` later.\n`)
   }
 }
 
@@ -589,10 +651,54 @@ interface VerifyOptions {
   ethMinConfirmations?: number
 }
 
-async function cmdVerify(opts: VerifyOptions): Promise<void> {
-  const raw = readScreenplayBounded(opts.inputFile)
-  const envelope = readEnvelope(opts.envelopePath)
-  const otsBytes = readFileSync(opts.otsPath)
+/** The subset of verify options the optional Ethereum-anchor report reads. */
+interface EthAnchorReportOptions {
+  ethRpc?: string
+  ethMinConfirmations?: number
+}
+
+/**
+ * Inputs to the shared verification core. `raw` is the screenplay bytes used to
+ * re-derive the contentHash + scene/paragraph Merkle trees; when it is
+ * undefined, verification runs DATE-ONLY — the OTS proof and the envelope's
+ * internal consistency are checked, but the screenplay contents are NOT. That
+ * matches verifying a proof-only `.evidence.screenreg` (or a `.screenreg`
+ * supplied without its screenplay): the date is proven, the contents are not.
+ */
+interface VerifyCoreInputs {
+  raw?: Buffer
+  envelope: Envelope
+  otsBytes: Uint8Array | Buffer
+  /** Path shown in the "verify the Bitcoin header yourself" hint. */
+  otsHintPath: string
+  /** True when otsHintPath is a `.screenreg` (the hint tells the user to unpack first). */
+  otsHintIsBundle?: boolean
+  requireBitcoinAnchor?: boolean
+  ethRpc?: string
+  ethMinConfirmations?: number
+  verbose?: boolean
+}
+
+interface VerifyBundleOptions {
+  bundlePath: string
+  /** Optional external screenplay, used to confirm contents when the bundle is proof-only. */
+  scriptPath?: string
+  requireBitcoinAnchor?: boolean
+  ethRpc?: string
+  ethMinConfirmations?: number
+  verbose?: boolean
+}
+
+/**
+ * Shared verification core for both the loose 3-file path (`cmdVerify`) and the
+ * single-file `.screenreg` path (`cmdVerifyBundle`). When `inputs.raw` is
+ * present the screenplay contents are re-derived and checked; when it is absent
+ * the run is date-only (envelope consistency + OTS proof, contents NOT checked).
+ */
+async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
+  const { envelope } = inputs
+  const otsBytes = Buffer.from(inputs.otsBytes)
+  const contentsChecked = inputs.raw !== undefined
 
   // 0. Validate envelope shape against the v1 schema BEFORE any cryptographic
   // work. If the envelope is malformed by shape (wrong locked values, partial
@@ -608,66 +714,70 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
     process.exit(2)
   }
 
-  // 1. Normalize + recompute contentHash
-  const normResult = normalize(raw)
-  if (!normResult.ok) {
-    process.stdout.write(`✗ FAILED — ${opts.inputFile} is not valid UTF-8\n`)
-    if (opts.verbose) process.stdout.write(`  ${normResult.detail}\n`)
-    process.exit(2)
-  }
-  const recomputedContentHash = contentHashOfNormalized(normResult.normalized)
-  if (recomputedContentHash !== envelope.committedClaim.contentHash) {
-    process.stdout.write(
-      `✗ FAILED — content hash mismatch\n` +
-        `  File hashes to:  ${recomputedContentHash}\n` +
-        `  Manifest expects: ${envelope.committedClaim.contentHash}\n` +
-        `  (Use \`${CLI_NAME} diagnose\` for detailed transform analysis.)\n`,
-    )
-    process.exit(2)
-  }
+  // 1–2b. Re-derive contentHash + Merkle trees from the screenplay. Skipped
+  // entirely for a date-only run (proof-only bundle, no screenplay supplied).
+  let recomputedContentHash: string | undefined
+  if (inputs.raw !== undefined) {
+    const normResult = normalize(inputs.raw)
+    if (!normResult.ok) {
+      process.stdout.write(`✗ FAILED — the screenplay is not valid UTF-8\n`)
+      if (inputs.verbose) process.stdout.write(`  ${normResult.detail}\n`)
+      process.exit(2)
+    }
+    recomputedContentHash = contentHashOfNormalized(normResult.normalized)
+    if (recomputedContentHash !== envelope.committedClaim.contentHash) {
+      process.stdout.write(
+        `✗ FAILED — content hash mismatch\n` +
+          `  Screenplay hashes to: ${recomputedContentHash}\n` +
+          `  Record expects:       ${envelope.committedClaim.contentHash}\n` +
+          `  (Use \`${CLI_NAME} diagnose\` for detailed transform analysis.)\n`,
+      )
+      process.exit(2)
+    }
 
-  // 2. Recompute scene tree (if committed)
-  if (envelope.committedClaim.sceneTreeRoot !== undefined) {
-    const scenes = detectScenes(normResult.normalized)
-    if (scenes.length !== envelope.committedClaim.sceneCount) {
-      process.stdout.write(
-        `✗ FAILED — scene count mismatch\n` +
-          `  File has:        ${scenes.length} scenes\n` +
-          `  Manifest expects: ${envelope.committedClaim.sceneCount} scenes\n`,
-      )
-      process.exit(2)
+    // Recompute scene tree (if committed)
+    if (envelope.committedClaim.sceneTreeRoot !== undefined) {
+      const scenes = detectScenes(normResult.normalized)
+      if (scenes.length !== envelope.committedClaim.sceneCount) {
+        process.stdout.write(
+          `✗ FAILED — scene count mismatch\n` +
+            `  Screenplay has:  ${scenes.length} scenes\n` +
+            `  Record expects:  ${envelope.committedClaim.sceneCount} scenes\n`,
+        )
+        process.exit(2)
+      }
+      const tree = buildSceneTree(scenes)
+      if (tree.root !== envelope.committedClaim.sceneTreeRoot) {
+        process.stdout.write(
+          `✗ FAILED — scene tree root mismatch\n` +
+            `  Screenplay computes: ${tree.root}\n` +
+            `  Record expects:      ${envelope.committedClaim.sceneTreeRoot}\n`,
+        )
+        process.exit(2)
+      }
     }
-    const tree = buildSceneTree(scenes)
-    if (tree.root !== envelope.committedClaim.sceneTreeRoot) {
-      process.stdout.write(
-        `✗ FAILED — scene tree root mismatch\n` +
-          `  File computes:   ${tree.root}\n` +
-          `  Manifest expects: ${envelope.committedClaim.sceneTreeRoot}\n`,
-      )
-      process.exit(2)
-    }
-  }
 
-  // 2b. Recompute paragraph tree (if committed). Per spec §05 §4, the verifier
-  // applies the same recomputation rules as for the scene tree.
-  if (envelope.committedClaim.paragraphTreeRoot !== undefined) {
-    const paragraphs = detectParagraphsWithPositions(normResult.normalized)
-    if (paragraphs.length !== envelope.committedClaim.paragraphCount) {
-      process.stdout.write(
-        `✗ FAILED — paragraph count mismatch\n` +
-          `  File has:        ${paragraphs.length} paragraphs\n` +
-          `  Manifest expects: ${envelope.committedClaim.paragraphCount} paragraphs\n`,
-      )
-      process.exit(2)
-    }
-    const ptree = buildParagraphTree(paragraphs)
-    if (ptree.root !== envelope.committedClaim.paragraphTreeRoot) {
-      process.stdout.write(
-        `✗ FAILED — paragraph tree root mismatch\n` +
-          `  File computes:   ${ptree.root}\n` +
-          `  Manifest expects: ${envelope.committedClaim.paragraphTreeRoot}\n`,
-      )
-      process.exit(2)
+    // Recompute paragraph tree (if committed). Per spec §05 §4, the verifier
+    // applies the same recomputation rules as for the scene tree.
+    if (envelope.committedClaim.paragraphTreeRoot !== undefined) {
+      const paragraphs = detectParagraphsWithPositions(normResult.normalized)
+      if (paragraphs.length !== envelope.committedClaim.paragraphCount) {
+        process.stdout.write(
+          `✗ FAILED — paragraph count mismatch\n` +
+            `  Screenplay has:  ${paragraphs.length} paragraphs\n` +
+            `  Record expects:  ${envelope.committedClaim.paragraphCount} paragraphs\n`,
+        )
+        process.exit(2)
+      }
+      const ptree = buildParagraphTree(paragraphs)
+      if (ptree.root !== envelope.committedClaim.paragraphTreeRoot) {
+        process.stdout.write(
+          `✗ FAILED — paragraph tree root mismatch\n` +
+            `  Screenplay computes: ${ptree.root}\n` +
+            `  Record expects:      ${envelope.committedClaim.paragraphTreeRoot}\n`,
+        )
+        process.exit(2)
+      }
     }
   }
 
@@ -695,11 +805,29 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
   // print it on every success/pending/no-attestation path. The verifier is
   // passed the INDEPENDENTLY-RECOMPUTED claimHash (never proof.claimHash) for
   // both the topic filter and the comparison.
-  const printEth = await prepareEthAnchorReport(envelope, recomputedClaimHash, opts)
+  const printEth = await prepareEthAnchorReport(envelope, recomputedClaimHash, inputs)
+
+  // The contents line tells the reader whether the screenplay was actually
+  // checked. A proof-only verification proves the DATE of a claim hash, not that
+  // any particular screenplay matches it — say so plainly.
+  const contentLine = contentsChecked
+    ? `  Content hash:  ${recomputedContentHash}\n`
+    : `  Content hash:  ${envelope.committedClaim.contentHash}  (from the record — screenplay not provided, so contents were NOT checked)\n`
+  const claimLine = `  Claim hash:    ${recomputedClaimHash}\n`
+  const dateOnlyTag = contentsChecked ? '' : ', DATE ONLY'
+  // Independent-block-header hint: a bare .ots verifies directly; a bundle must
+  // be unpacked first so upstream `ots verify` has a .ots to read.
+  const upstreamHint = inputs.otsHintIsBundle
+    ? `        verification, run \`${CLI_NAME} unpack ${inputs.otsHintPath} --out-dir out\` then upstream\n` +
+      `        \`ots verify out/proof.ots\` against the opentimestamps-client. Full in-process\n` +
+      `        SPV ships in v0.2.\n`
+    : `        verification, run upstream \`ots verify ${inputs.otsHintPath}\` against the\n` +
+      `        opentimestamps-client. Full in-process SPV ships in v0.2.\n`
 
   // Status headline distinguishes Bitcoin-attestation-present vs pending vs
-  // no-attestations. A casual reader who stops at the first line MUST get the
-  // right impression of verification strength.
+  // no-attestations, and contents-verified vs date-only. A casual reader who
+  // stops at the first line MUST get the right impression of verification
+  // strength.
   //
   // IMPORTANT: this verifier parses the OTS proof structure and CONFIRMS that
   // a Bitcoin block-header attestation is referenced. It does NOT independently
@@ -709,55 +837,127 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
   // `ots verify` for true block-header verification.
   if (otsResult.bitcoinAnchored) {
     process.stdout.write(
-      `✓ VERIFIED — claim hash matches and a Bitcoin attestation is present in the .ots proof.\n`,
+      contentsChecked
+        ? `✓ VERIFIED — claim hash matches and a Bitcoin attestation is present in the .ots proof.\n`
+        : `✓ VERIFIED (DATE ONLY) — a Bitcoin attestation is present for this claim hash. The\n` +
+            `  screenplay contents were NOT checked; supply the screenplay to confirm them.\n`,
     )
-    process.stdout.write(`  Content hash:  ${recomputedContentHash}\n`)
-    process.stdout.write(`  Claim hash:    ${recomputedClaimHash}\n`)
+    process.stdout.write(contentLine)
+    process.stdout.write(claimLine)
     process.stdout.write(
       `  Bitcoin attestation: block heights ${otsResult.bitcoinBlockHeights.join(', ')} (parsed from .ots structure)\n` +
         `  NOTE: this verifier does NOT fetch + verify Bitcoin block headers in v0.x —\n` +
         `        only the OTS proof structure was checked. For independent block-header\n` +
-        `        verification, run upstream \`ots verify ${opts.otsPath}\` against the\n` +
-        `        opentimestamps-client. Full in-process SPV ships in v0.2.\n`,
+        upstreamHint,
     )
     printEth()
     process.exit(0)
   }
   if (otsResult.pendingCalendarUrls.length > 0) {
     process.stdout.write(
-      `⚠ VERIFIED (PENDING) — claim hash matches, but the .ots proof has NOT YET been confirmed on Bitcoin.\n`,
+      `⚠ VERIFIED (PENDING${dateOnlyTag}) — ${contentsChecked ? 'claim hash matches, but ' : ''}the .ots proof has NOT YET been confirmed on Bitcoin.\n`,
     )
-    process.stdout.write(`  Content hash:  ${recomputedContentHash}\n`)
-    process.stdout.write(`  Claim hash:    ${recomputedClaimHash}\n`)
+    if (!contentsChecked) {
+      process.stdout.write(`  (Screenplay contents were NOT checked; supply the screenplay to confirm them.)\n`)
+    }
+    process.stdout.write(contentLine)
+    process.stdout.write(claimLine)
     process.stdout.write(
       `  Bitcoin block: PENDING — proof references calendars: ${otsResult.pendingCalendarUrls.join(', ')}\n` +
-        `                 Run \`${CLI_NAME} finalize <ots>\` after ~1-6 hours to fold the calendar\n` +
-        `                 attestation into a Bitcoin block proof.\n`,
+        `                 Run \`${CLI_NAME} finalize <ots|.screenreg>\` after ~1-6 hours to fold the\n` +
+        `                 calendar attestation into a Bitcoin block proof.\n`,
     )
     process.stdout.write(
       `  Until upgraded, this proof depends on the calendar operator(s) above. It is NOT\n` +
         `  yet independently verifiable against Bitcoin block headers alone.\n`,
     )
     printEth()
-    if (opts.requireBitcoinAnchor) {
+    if (inputs.requireBitcoinAnchor) {
       process.stdout.write(`\n✗ FAILED — --require-bitcoin-anchor was set but the proof is still pending.\n`)
       process.exit(2)
     }
     process.exit(0)
   }
   process.stdout.write(
-    `⚠ VERIFIED (NO ATTESTATIONS) — claim hash matches, but the .ots proof carries no\n` +
+    `⚠ VERIFIED (NO ATTESTATIONS${dateOnlyTag}) — ${contentsChecked ? 'claim hash matches, but ' : ''}the .ots proof carries no\n` +
       `  attestations (placeholder / malformed?). The registration cannot be timestamp-verified\n` +
       `  against any external authority in its current state.\n`,
   )
-  process.stdout.write(`  Content hash:  ${recomputedContentHash}\n`)
-  process.stdout.write(`  Claim hash:    ${recomputedClaimHash}\n`)
+  if (!contentsChecked) {
+    process.stdout.write(`  (Screenplay contents were NOT checked; supply the screenplay to confirm them.)\n`)
+  }
+  process.stdout.write(contentLine)
+  process.stdout.write(claimLine)
   printEth()
-  if (opts.requireBitcoinAnchor) {
+  if (inputs.requireBitcoinAnchor) {
     process.stdout.write(`\n✗ FAILED — --require-bitcoin-anchor was set but the proof has no attestations.\n`)
     process.exit(2)
   }
   process.exit(0)
+}
+
+/** Loose 3-file verification: screenplay + envelope.json + proof.ots. */
+async function cmdVerify(opts: VerifyOptions): Promise<void> {
+  const raw = readScreenplayBounded(opts.inputFile)
+  const envelope = readEnvelope(opts.envelopePath)
+  const otsBytes = readFileSync(opts.otsPath)
+  await verifyCore({
+    raw,
+    envelope,
+    otsBytes,
+    otsHintPath: opts.otsPath,
+    ...(opts.requireBitcoinAnchor !== undefined ? { requireBitcoinAnchor: opts.requireBitcoinAnchor } : {}),
+    ...(opts.ethRpc !== undefined ? { ethRpc: opts.ethRpc } : {}),
+    ...(opts.ethMinConfirmations !== undefined ? { ethMinConfirmations: opts.ethMinConfirmations } : {}),
+    ...(opts.verbose !== undefined ? { verbose: opts.verbose } : {}),
+  })
+}
+
+/**
+ * Single-file verification: `screenreg verify <file.screenreg>`. The same
+ * verified read path the browser `/verify/` page uses — integrity-check the
+ * container, then run the shared core. A FULL bundle carries the screenplay, so
+ * contents are confirmed from the embedded source; a proof-only bundle is
+ * date-only unless the user also supplies the screenplay as a second argument.
+ */
+async function cmdVerifyBundle(opts: VerifyBundleOptions): Promise<void> {
+  const bundleBytes = readBytesOrDie(opts.bundlePath, 'verify: cannot read')
+  let parsed: Awaited<ReturnType<typeof readScreenreg>>
+  try {
+    parsed = await readScreenreg(bundleBytes)
+  } catch (err) {
+    die(`verify: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (!parsed.integrity.ok) {
+    process.stdout.write(`✗ FAILED — the .screenreg failed its integrity check\n`)
+    for (const issue of parsed.integrity.issues) process.stdout.write(`  • ${issue}\n`)
+    process.exit(2)
+  }
+  if (!parsed.otsBytes) die(`verify: ${opts.bundlePath} contains no OpenTimestamps proof to verify`)
+
+  // Choose the screenplay source for the contents check. An EXPLICITLY supplied
+  // screenplay is always the one verified — it answers "does THIS file match the
+  // registration?" and must never be silently ignored (ignoring it would let a
+  // non-matching file appear to pass). Otherwise a full bundle confirms contents
+  // from its embedded source; a proof-only bundle with no screenplay is date-only.
+  let raw: Buffer | undefined
+  if (opts.scriptPath) {
+    raw = readScreenplayBounded(opts.scriptPath)
+  } else if (parsed.sourceText) {
+    raw = Buffer.from(parsed.sourceText)
+  }
+
+  await verifyCore({
+    ...(raw !== undefined ? { raw } : {}),
+    envelope: parsed.envelope,
+    otsBytes: parsed.otsBytes,
+    otsHintPath: opts.bundlePath,
+    otsHintIsBundle: true,
+    ...(opts.requireBitcoinAnchor !== undefined ? { requireBitcoinAnchor: opts.requireBitcoinAnchor } : {}),
+    ...(opts.ethRpc !== undefined ? { ethRpc: opts.ethRpc } : {}),
+    ...(opts.ethMinConfirmations !== undefined ? { ethMinConfirmations: opts.ethMinConfirmations } : {}),
+    ...(opts.verbose !== undefined ? { verbose: opts.verbose } : {}),
+  })
 }
 
 /**
@@ -772,7 +972,7 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
 async function prepareEthAnchorReport(
   envelope: Envelope,
   recomputedClaimHash: string,
-  opts: VerifyOptions,
+  opts: EthAnchorReportOptions,
 ): Promise<() => void> {
   if (opts.ethRpc === undefined) return () => {}
   const ethProof = envelope.evidenceBundle.proofs.find(
@@ -893,11 +1093,56 @@ interface FinalizeCliOptions {
  * (no Bitcoin attestation yet; safe to re-run later), 1 = error.
  */
 async function cmdFinalize(opts: FinalizeCliOptions): Promise<void> {
+  // Accept either a bare .ots proof or a .screenreg bundle (unpack → finalize → repack in place).
+  const isBundle = opts.otsPath.endsWith('.screenreg')
   let otsBytes: Uint8Array
-  try {
-    otsBytes = new Uint8Array(readFileSync(opts.otsPath))
-  } catch (err) {
-    die(`finalize: cannot read ${opts.otsPath}: ${err instanceof Error ? err.message : String(err)}`)
+  let parsedBundle: Awaited<ReturnType<typeof readScreenreg>> | null = null
+  if (isBundle) {
+    const bundleBytes = readBytesOrDie(opts.otsPath, 'finalize: cannot read')
+    try {
+      parsedBundle = await readScreenreg(bundleBytes)
+    } catch (err) {
+      die(`finalize: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    if (!parsedBundle.otsBytes) die(`finalize: ${opts.otsPath} contains no OpenTimestamps proof to finalize`)
+    // VERIFY the bundle before upgrading + repacking it. Otherwise a valid-CRC tampered bundle
+    // (integrity.ok=false) could be finalized and rewritten with fresh descriptor digests,
+    // laundering the corruption. Check the descriptor digests, the envelope shape, the
+    // claim→committedClaimHash binding, the embedded source (full bundles), and that the OTS proof
+    // actually anchors this claim — refusing to finalize anything that doesn't fully bind.
+    if (!parsedBundle.integrity.ok) {
+      die(`finalize: ${opts.otsPath} failed its integrity check (${parsedBundle.integrity.issues.join('; ')}) — refusing to finalize a corrupt bundle`)
+    }
+    const ev = validateEnvelope(parsedBundle.envelope)
+    if (!ev.ok) die(`finalize: ${opts.otsPath} contains an invalid envelope:\n  - ${ev.errors.join('\n  - ')}`)
+    const recomputedClaimHash = computeClaimHash(
+      parsedBundle.envelope.committedClaim as unknown as Parameters<typeof computeClaimHash>[0],
+    )
+    if (recomputedClaimHash !== parsedBundle.envelope.evidenceBundle.committedClaimHash) {
+      die(`finalize: envelope tampering — recomputed claim hash does not match the stored committedClaimHash`)
+    }
+    if (parsedBundle.sourceText) {
+      const norm = normalize(Buffer.from(parsedBundle.sourceText))
+      if (!norm.ok) die(`finalize: the embedded screenplay is not valid UTF-8 (${norm.detail})`)
+      if (contentHashOfNormalized(norm.normalized) !== parsedBundle.envelope.committedClaim.contentHash) {
+        die(`finalize: the embedded screenplay does not match the committed contentHash — refusing to finalize a tampered bundle`)
+      }
+    }
+    // The embedded OTS proof must actually anchor this claim hash.
+    const otsCheck = verifyOtsAgainstFileDigest({
+      otsBytes: Buffer.from(parsedBundle.otsBytes),
+      expectedFileDigest: Buffer.from(recomputedClaimHash.slice('sha256:'.length), 'hex'),
+    })
+    if (!otsCheck.ok) {
+      die(`finalize: the embedded proof does not anchor this claim — refusing to finalize (${otsCheck.reason})`)
+    }
+    otsBytes = parsedBundle.otsBytes
+  } else {
+    try {
+      otsBytes = new Uint8Array(readFileSync(opts.otsPath))
+    } catch (err) {
+      die(`finalize: cannot read ${opts.otsPath}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   const finalizeOpts: FinalizeOptions = { otsBytes }
   if (opts.timeoutMs !== undefined) finalizeOpts.timeoutMs = opts.timeoutMs
@@ -921,12 +1166,26 @@ async function cmdFinalize(opts: FinalizeCliOptions): Promise<void> {
   }
 
   const outPath = opts.outPath ?? opts.otsPath
-  writeFileSync(outPath, Buffer.from(result.otsBytes))
+  if (isBundle && parsedBundle) {
+    // Fold the upgraded proof back into the one file (full bundle if it carries the source text,
+    // evidence bundle otherwise). claimHash is unchanged — only the unhashed proof bytes upgrade.
+    let rebuilt: Uint8Array
+    try {
+      rebuilt = parsedBundle.sourceText
+        ? await buildScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes, sourceText: parsedBundle.sourceText })
+        : await buildEvidenceScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes })
+    } catch (err) {
+      die(`finalize: could not repack the .screenreg: ${err instanceof ScreenregError ? err.message : String(err)}`)
+    }
+    writeFileSync(outPath, Buffer.from(rebuilt))
+  } else {
+    writeFileSync(outPath, Buffer.from(result.otsBytes))
+  }
   const plural = result.bitcoinBlockHeights.length > 1 ? 's' : ''
   process.stderr.write(
     `✓  Confirmed on Bitcoin (block height${plural}: ${result.bitcoinBlockHeights.join(', ')}).\n` +
-      `   Wrote the finalized proof to ${outPath}. It now verifies against Bitcoin block\n` +
-      `   headers alone — no calendar or server required.\n`,
+      `   Wrote the finalized ${isBundle ? '.screenreg' : 'proof'} to ${outPath}. It now verifies against\n` +
+      `   Bitcoin block headers alone — no calendar or server required.\n`,
   )
   process.exit(0)
 }
@@ -1847,11 +2106,22 @@ function printUsage(): void {
   ${CLI_NAME} register <file> [--encrypt-title TITLE] [--encrypt-author AUTHOR]
                        [--training-mining allowed|notAllowed|constrained]
                        [--no-scene-tree] [--mock] [--password PASSWORD]
-                       [--envelope-out PATH] [--ots-out PATH]
+                       [--evidence] [--loose] [--envelope-out PATH] [--ots-out PATH]
                        [--identity] [--identity-key-out PATH]
                        [--previous-claim-hash sha256:...]
-  ${CLI_NAME} verify <file> <envelope> <ots> [--require-bitcoin-anchor]
-                       [--eth-rpc URL] [--eth-min-confirmations N]
+                       Default: writes ONE self-contained <file>.screenreg (your
+                       screenplay + the proof in a single file). --evidence also
+                       writes a proof-only <file>.evidence.screenreg (no screenplay)
+                       for sharing. --loose (or --envelope-out/--ots-out) emits the
+                       separate manifest + .ots instead, for integrators. --identity
+                       always writes the private key as a separate .pem (never in a bundle).
+  ${CLI_NAME} verify <file.screenreg> [screenplay]
+  ${CLI_NAME} verify <file> <envelope> <ots>
+                       [--require-bitcoin-anchor] [--eth-rpc URL] [--eth-min-confirmations N]
+                       Verify a single .screenreg (contents confirmed from the
+                       embedded screenplay; a proof-only bundle verifies the date,
+                       add the screenplay to also confirm contents) — or the loose
+                       3-file artifacts. The flags below apply to both forms.
                        Default: pending proofs still exit 0 with a warning headline.
                        --require-bitcoin-anchor: exit 2 unless the proof has been
                        upgraded to a Bitcoin block attestation (use in CI / scripts
@@ -1913,11 +2183,12 @@ function printUsage(): void {
                        it verifies. The original envelope + .ots stay untouched.
   ${CLI_NAME} timelock-decrypt <envelope> <fieldName>
   ${CLI_NAME} generate-identity <output-private-key.pem>
-  ${CLI_NAME} finalize <ots> [--out PATH] [--timeout-ms N]   (alias: upgrade)
+  ${CLI_NAME} finalize <ots|.screenreg> [--out PATH] [--timeout-ms N]   (alias: upgrade)
                        Folds the Bitcoin attestation into a pending proof once the
-                       calendars have it (typically 1-6 h after registration). Writes
-                       the upgraded proof in place (or to --out), via the clean-room
-                       TS engine — no Python. Exit: 0 confirmed, 3 still pending, 1 error.
+                       calendars have it (typically 1-6 h after registration). Accepts a
+                       bare .ots OR a .screenreg (unpacks, upgrades, repacks in place).
+                       Writes in place (or to --out), via the clean-room TS engine — no
+                       Python. Exit: 0 confirmed, 3 still pending, 1 error.
   ${CLI_NAME} normalize <file>
   ${CLI_NAME} claim <file>
   ${CLI_NAME} scene-prove <file> <envelope> <sceneIndex>
@@ -2259,6 +2530,8 @@ async function main(): Promise<void> {
           opts.trainingMining = raw
         } else if (a === '--no-scene-tree') opts.noSceneTree = true
         else if (a === '--mock') opts.mock = true
+        else if (a === '--loose') opts.loose = true
+        else if (a === '--evidence') opts.evidence = true
         else if (a === '--password') {
           opts.password = requireArg(a, rest[++i])
           process.stderr.write(
@@ -2364,7 +2637,25 @@ async function main(): Promise<void> {
           ethMinConfirmations = n
         } else positional.push(a)
       }
-      if (positional.length < 3) die('verify: need <file> <envelope> <ots>')
+      const first = positional[0]
+      if (first === undefined) {
+        die('verify: need <file.screenreg>, or <file> <envelope> <ots> for loose artifacts')
+      }
+      // Single-file path: `verify <file.screenreg> [screenplay]`. The bundle is
+      // the same artifact the browser /verify/ page accepts.
+      if (first.endsWith('.screenreg')) {
+        await cmdVerifyBundle({
+          bundlePath: first,
+          ...(positional[1] !== undefined ? { scriptPath: positional[1] } : {}),
+          requireBitcoinAnchor,
+          ...(ethRpc !== undefined ? { ethRpc } : {}),
+          ...(ethMinConfirmations !== undefined ? { ethMinConfirmations } : {}),
+        })
+        return
+      }
+      if (positional.length < 3) {
+        die('verify: need <file.screenreg>, or <file> <envelope> <ots> for loose artifacts')
+      }
       await cmdVerify({
         inputFile: positional[0]!,
         envelopePath: positional[1]!,

@@ -46,7 +46,7 @@ Rain.
 function register(tmp: string, name: string): { scriptPath: string; envelopePath: string; otsPath: string } {
   const scriptPath = join(tmp, name)
   writeFileSync(scriptPath, SAMPLE)
-  const reg = runCli(['register', scriptPath, '--mock'])
+  const reg = runCli(['register', scriptPath, '--mock', '--loose'])
   expect(reg.code).toBe(0)
   return {
     scriptPath,

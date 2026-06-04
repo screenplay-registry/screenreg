@@ -6,11 +6,11 @@
 
 Two options, equivalent in evidentiary weight:
 
-**Browser (recommended for one-off registrations).** Drag your `.fountain` file into [screenplayregistry.org/create/](https://screenplayregistry.org/create/). The page hashes locally and gives back `manifest.json` + `proof.ots`. No account, no install, no upload.
+**Browser (recommended for one-off registrations).** Drag your screenplay — a `.pdf`, `.fountain`, or plain text — into [screenplayregistry.org/create/](https://screenplayregistry.org/create/). The page reads and hashes it locally and gives back a single `.screenreg` file (plus a shareable proof-only version). No account, no install, no upload.
 
-**CLI (for batch / scripted use).** Install once (`git clone` + `npm install`), then run `./bin/screenreg.mjs register draft.fountain`. Two files appear next to the script. (It is not published to npm yet; the examples below abbreviate `./bin/screenreg.mjs` as `screenreg`, so alias it in your clone if you like.)
+**CLI (for batch / scripted use).** Install once (`git clone` + `npm install`), then run `./bin/screenreg.mjs register draft.fountain`. One `draft.screenreg` appears next to the script — your screenplay and the proof in a single file. (Add `--loose` if you'd rather have the separate `manifest.json` + `.ots`.) It is not published to npm yet; the examples below abbreviate `./bin/screenreg.mjs` as `screenreg`, so alias it in your clone if you like.
 
-Verification is the same in either path: drag-drop the original screenplay + the two artifacts at [screenplayregistry.org/verify/](https://screenplayregistry.org/verify/), or run `screenreg verify <file> <manifest> <ots>`.
+Verification is the same in either path and takes one file: drag-drop the `.screenreg` at [screenplayregistry.org/verify/](https://screenplayregistry.org/verify/), or run `screenreg verify draft.screenreg`. (A proof-only `.evidence.screenreg` verifies the date; add the screenplay — `screenreg verify draft.evidence.screenreg draft.fountain` — to also confirm the contents. The loose 3-file form `screenreg verify <file> <manifest> <ots>` still works for integrators.)
 
 ---
 
@@ -102,7 +102,7 @@ To mitigate: only encrypt fields you can recreate (or whose absence you'd be fin
 
 ## What if I edit my script after registering?
 
-Verification will fail. The hash will differ. You should register a NEW version (which produces a new `.manifest.json` + `.proof.ots`). It's normal to have multiple registrations over a script's lifetime.
+Verification will fail. The hash will differ. You should register a NEW version (which produces a new `.screenreg`). It's normal to have multiple registrations over a script's lifetime.
 
 The `diagnose` mode will show you the transforms applied to the candidate file and the hash difference, but it cannot tell you EXACTLY which bytes changed — the protocol only stores the hash of the registered version, not the bytes.
 

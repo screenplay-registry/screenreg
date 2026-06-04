@@ -86,9 +86,9 @@ See [`docs/threat-model.md`](docs/threat-model.md) for the precise guarantees an
 
 ### In the browser (recommended)
 
-Drop your `.fountain` file at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page hashes the file locally, sends only the 32-byte claim hash to public OpenTimestamps calendars, and gives you back two files to download: `manifest.json` (the envelope) and `proof.ots` (the Bitcoin timestamp proof). The proof is usable immediately as a pending calendar attestation; the Bitcoin confirmation becomes available about 1–6 hours later; fold it into the proof by running `screenreg upgrade`. The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
+Drop your screenplay — a `.pdf`, `.fountain`, or plain text — at [**screenplayregistry.org/create/**](https://screenplayregistry.org/create/). The page reads and hashes the file locally (a PDF is converted to text right in your browser), sends only the 32-byte claim hash to public OpenTimestamps calendars, and gives you back a single **`.screenreg`** file: your screenplay, the registration record, and the timestamp proof in one file — plus a shareable proof-only version that omits the script. The proof is usable immediately as a pending calendar attestation; the Bitcoin confirmation becomes available about 1–6 hours later, and the page hands you the finalized `.screenreg` once it lands. The script content never leaves your tab; there is no upload step. No account, no install, no analytics.
 
-Verify any registered proof at [**screenplayregistry.org/verify/**](https://screenplayregistry.org/verify/) by drag-dropping the original file plus the two artifacts. Verification is entirely offline; the page never contacts the protocol's servers.
+Verify any registered proof at [**screenplayregistry.org/verify/**](https://screenplayregistry.org/verify/) by drag-dropping the `.screenreg` (a proof-only file verifies the date; add the screenplay to also confirm the contents). Verification is entirely offline; the page never contacts the protocol's servers.
 
 > **Hosting**: the official build of these pages is served from Cloudflare Pages with the security headers defined in [`landing/_headers`](landing/_headers) (strict CSP, HSTS preload-eligible, COOP/CORP same-origin, locked-down Permissions-Policy). The same HTML, JS, and headers are vendored in this repo under [`landing/`](landing/) and [`verifier-web/`](verifier-web/) — you can self-host either page or serve them from any static-file host. Deploy instructions are in [`landing/README.md`](landing/README.md).
 
@@ -101,17 +101,22 @@ cd screenreg
 npm install
 python3 -m venv .venv && .venv/bin/pip install opentimestamps opentimestamps-client
 
-# Register a Fountain screenplay
+# Register a Fountain screenplay → ONE self-contained file
 ./bin/screenreg.mjs register my-screenplay.fountain
-#   → my-screenplay.fountain.manifest.json
-#   → my-screenplay.fountain.proof.ots   (pending; Bitcoin confirmation ~1-6h)
-#   later: ./bin/screenreg.mjs upgrade my-screenplay.fountain.proof.ots
+#   → my-screenplay.screenreg   (your screenplay + the proof in one file; Bitcoin confirmation ~1-6h)
+#   later, once Bitcoin confirms: ./bin/screenreg.mjs finalize my-screenplay.screenreg
 
-# Verify any time (offline, never needs the protocol's servers)
+# Verify it — one file, on the CLI or in the browser (drop it at screenplayregistry.org/verify/):
+./bin/screenreg.mjs verify my-screenplay.screenreg
+# → ✓ VERIFIED — claim hash matches and the screenplay contents match the registration
+#   (a proof-only .evidence.screenreg verifies the date; add the screenplay to confirm contents:
+#    ./bin/screenreg.mjs verify my-screenplay.evidence.screenreg my-screenplay.fountain)
+
+# Prefer separate files end-to-end (integrators)? --loose emits the manifest + .ots, no bundle:
+./bin/screenreg.mjs register my-screenplay.fountain --loose
+#   → my-screenplay.fountain.manifest.json + my-screenplay.fountain.proof.ots
 ./bin/screenreg.mjs verify my-screenplay.fountain \
-    my-screenplay.fountain.manifest.json \
-    my-screenplay.fountain.proof.ots
-# → ✓ VERIFIED — content hash matches, claim hash matches, OTS proof valid
+    my-screenplay.fountain.manifest.json my-screenplay.fountain.proof.ots
 
 # Register from a PDF (v0.2+): two-step so you review the extracted Fountain
 ./bin/screenreg.mjs extract my-screenplay.pdf > my-screenplay.fountain
@@ -119,9 +124,6 @@ python3 -m venv .venv && .venv/bin/pip install opentimestamps opentimestamps-cli
 ./bin/screenreg.mjs register my-screenplay.fountain --source-pdf my-screenplay.pdf
 #   → the envelope records the source-PDF SHA-256 in
 #     evidenceBundle.bundleExtensions.sourceExtractor for archival audit
-
-# If verification fails, diagnose mode reports what it can and cannot determine
-./bin/screenreg.mjs diagnose my-screenplay.fountain my-screenplay.fountain.manifest.json
 ```
 
 ## Architecture (one diagram)

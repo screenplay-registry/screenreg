@@ -21,11 +21,11 @@ Add a "Register on screenplayregistry.org" menu item that:
 2. Opens the user's default browser to `https://screenplayregistry.org/create/`.
 3. Surfaces a short note prompting them to drag the temp file into the page.
 
-The page handles the hash, calendar fan-out, and proof assembly entirely client-side; your tool never sees the resulting `manifest.json` or `proof.ots` (the user downloads them from the page). Use this when you want zero registration logic in your binary and no dependency on the screenreg codebase.
+The page handles the hash, calendar fan-out, and proof assembly entirely client-side; your tool never sees the resulting `.screenreg` (the user downloads it from the page). Use this when you want zero registration logic in your binary and no dependency on the screenreg codebase.
 
 ### Path B: shell out to the CLI (simplest in-process flow)
 
-Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. Drop the produced `.manifest.json` + `.proof.ots` in a registrations subdirectory next to the script. (In these examples `screenreg` is the cloned `./bin/screenreg.mjs` — it is not published to npm yet, so resolve the path or alias it in your tool.)
+Spawn `screenreg register <file>` from your tool's "Register" menu. Parse stdout/stderr for the result. By default it produces one self-contained `<file>.screenreg`; a tool that prefers the separate `.manifest.json` + `.proof.ots` to file in a registrations subdirectory should pass `--loose` (or `--envelope-out`/`--ots-out` for explicit paths). (In these examples `screenreg` is the cloned `./bin/screenreg.mjs` — it is not published to npm yet, so resolve the path or alias it in your tool.)
 
 This works in any tool that can spawn a subprocess. Total integration effort: ~1 hour.
 
@@ -103,8 +103,8 @@ The SDK is pure TypeScript (zero deps for normalize/canonicalize/merkle/encrypt;
 
 If your tool is server-rendered SaaS:
 - Spawn `screenreg register` from a worker job
-- Store the resulting `manifest.json` + `.ots` files in the user's project storage
-- Surface a "Registered ✓" indicator in the UI with a button to download both files
+- Store the resulting `.screenreg` in the user's project storage (or pass `--loose` for separate `manifest.json` + `.ots` files)
+- Surface a "Registered ✓" indicator in the UI with a button to download the `.screenreg`
 
 This is the recommended pattern for any SaaS writing tool that wants to register on the user's behalf.
 
@@ -117,7 +117,7 @@ Required:
 
 Recommended:
 - An **AI-training preference** toggle (allowed / notAllowed / constrained) with the C2PA convention explained briefly
-- A **Verify** button that loads the user's manifest + .ots and confirms the current file matches
+- A **Verify** button that loads the user's `.screenreg` (or, in `--loose` setups, the manifest + .ots) and confirms the current file matches
 - A **Diagnose** button for when Verify fails — explains the transforms applied to the current file
 
 Optional but valuable:

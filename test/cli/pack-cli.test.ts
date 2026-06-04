@@ -83,7 +83,7 @@ describe('CLI: pack / unpack .screenreg (mock mode)', () => {
     script = join(tmp, 'script.fountain')
     envelope = `${script}.manifest.json`
     writeFileSync(script, SAMPLE)
-    const reg = runCli(['register', script, '--mock'])
+    const reg = runCli(['register', script, '--mock', '--loose'])
     expect(reg.code).toBe(0)
     expect(existsSync(envelope)).toBe(true)
   })

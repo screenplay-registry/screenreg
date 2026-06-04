@@ -100,7 +100,7 @@ The lesson: **a registration service that disappears takes your evidence with it
 
 For a serious screenwriter, the strongest combination is:
 
-1. **The Screenplay Registry registration** — immediate, free, privacy-first, AI-aware. Use at every significant draft revision. Back up the manifest + .ots files.
+1. **The Screenplay Registry registration** — immediate, free, privacy-first, AI-aware. Use at every significant draft revision. Back up the `.screenreg` file (it holds your screenplay, the registration record, and the timestamp proof together).
 2. **WGA registration** at major milestones (sale, option, optioning) — for guild-internal credit disputes if the project gets made.
 3. **US Copyright Office registration** before any public distribution — for federal-court teeth on infringement.
 

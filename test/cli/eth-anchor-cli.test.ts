@@ -56,7 +56,7 @@ function registerAndAnchor(tmp: string): {
 } {
   const scriptPath = join(tmp, 'script.fountain')
   writeFileSync(scriptPath, SAMPLE)
-  const reg = runCli(['register', scriptPath, '--mock'])
+  const reg = runCli(['register', scriptPath, '--mock', '--loose'])
   expect(reg.code).toBe(0)
   const envelopePath = `${scriptPath}.manifest.json`
   const otsPath = `${scriptPath}.proof.ots`
@@ -116,7 +116,7 @@ describe('CLI: attach-eth-anchor', () => {
   it('rejects a malformed coordinate at the validateEnvelope boundary (exit 2)', () => {
     const scriptPath = join(tmp, 'script.fountain')
     writeFileSync(scriptPath, SAMPLE)
-    runCli(['register', scriptPath, '--mock'])
+    runCli(['register', scriptPath, '--mock', '--loose'])
     const attach = runCli([
       'attach-eth-anchor',
       `${scriptPath}.manifest.json`,

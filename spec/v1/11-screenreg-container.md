@@ -15,12 +15,15 @@ verdict. The container is a delivery vehicle, not a protocol surface.
 
 ### 1. Purpose
 
-A registration produces three loose artifacts today: the envelope (`*.manifest.json`), the
-OpenTimestamps proof (`*.proof.ots`), and — optionally — an identity key. Asking a writer to
-keep track of, and a verifier to re-supply, several files is the dominant source of friction.
+A registration is built from a small set of loose artifacts: the envelope (`*.manifest.json`),
+the OpenTimestamps proof (`*.proof.ots`), and — optionally — an identity key. Asking a writer to
+keep track of, and a verifier to re-supply, several files is the dominant source of friction, so
+the `.screenreg` container — which collapses these into **one human-handleable file** — is the
+DEFAULT output of a registration; the loose artifacts are emitted separately only on request
+(the reference CLI's `--loose`/`--envelope-out`/`--ots-out`, for integrators). The identity key,
+when present, is always a separate file and is NEVER placed in a container (§8).
 
-The `.screenreg` container collapses these into **one human-handleable file** in two clearly
-distinguished variants:
+The container comes in two clearly distinguished variants:
 
 - **`<name>.screenreg`** — the **full** bundle. Self-contained: it embeds the screenplay text
   that was hashed, so the holder can verify *and open* the commitment (prove the bytes) from
