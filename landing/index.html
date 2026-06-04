@@ -2,8 +2,8 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" type="image/svg+xml" href="/icon.svg">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>The Screenplay Registry — Free, private, permanent proof your screenplay existed</title>
 <meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment.">
 <meta property="og:type" content="website">
@@ -697,6 +697,75 @@
     .topbar nav { gap: 18px; }
     .topbar .status { display: none; }
   }
+
+  /* ============================================================
+     MOBILE LAYER — phone layout for the single responsive page.
+     Sticky bottom action bar + vertically-stacked pipeline.
+     The hero animation script is unchanged, so the production
+     CSP hash stays valid. Edit content once; both layouts follow.
+     ============================================================ */
+  .actionbar { display: none; }   /* desktop: hidden, hero CTAs suffice */
+
+  @media (max-width: 760px) {
+    /* room for the fixed bar */
+    body { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+    main { padding: 28px 18px 0; }
+    h1 { font-size: 33px; }
+
+    /* hero CTAs stack full-width */
+    .cta-buttons { flex-direction: column; gap: 11px; }
+    .cta-btn { justify-content: center; padding: 16px 22px; }
+
+    /* sticky bottom action bar — Create / Verify always reachable */
+    .actionbar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+      display: flex; gap: 10px;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: rgba(251,250,246,0.92);
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      border-top: 1px solid var(--rule);
+      box-shadow: 0 -6px 24px rgba(22,20,18,0.06);
+    }
+    .actionbar a {
+      flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 15px 14px;
+      font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, monospace;
+      font-weight: 700; font-size: 15.5px;
+      border: 1.5px solid var(--ink); border-radius: 0;
+      text-decoration: none;
+    }
+    .actionbar a .arrow { font-family: ui-monospace, Menlo, monospace; font-weight: 400; font-size: 17px; }
+    .actionbar a.primary { flex: 1.35; background: var(--accent); color: var(--paper); border-color: var(--accent); }
+    .actionbar a.primary:hover { background: var(--accent); color: var(--paper); }
+    .actionbar a.secondary { background: var(--paper); color: var(--ink); }
+    .actionbar a.secondary:hover { background: var(--paper); color: var(--ink); }
+
+    /* pipeline: re-stack the horizontal flow into a vertical column */
+    .hw-stage { padding: 26px 16px 28px; }
+    .hw-stage .flow { flex-direction: column; min-height: 0; gap: 0; }
+    .hw-stage .seg { flex-direction: column; max-width: none; overflow: visible; }
+    .hw-stage .seg .arr { padding: 11px 0; transform: rotate(90deg); }   /* point down */
+    .hw-stage .g-files .f { width: 196px; }
+  }
+
+  /* mobile animation overrides (combined query — CSS can't nest @media) */
+  @media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
+    .hw-stage:not(.run) .seg { max-width: none; opacity: 0; }
+    .hw-stage.run .seg { animation: hwSegV .6s cubic-bezier(.2,.7,.3,1) both; }
+    .hw-stage.run .seg.s2 { animation-delay: .5s; }
+    .hw-stage.run .seg.s3 { animation-delay: 1.1s; }
+    .hw-stage.run .seg.s4 { animation-delay: 1.7s; }
+    .hw-stage.run .seg .arr { animation: hwArrV .45s ease both; }
+    .hw-stage.run .seg.s2 .arr { animation-delay: .5s; }
+    .hw-stage.run .seg.s3 .arr { animation-delay: 1.1s; }
+    .hw-stage.run .seg.s4 .arr { animation-delay: 1.7s; }
+    .hw-stage.run .seg.s2 .node { animation-delay: .75s; }
+    .hw-stage.run .seg.s3 .node { animation-delay: 1.35s; }
+    .hw-stage.run .seg.s4 .node { animation-delay: 1.95s; }
+  }
+  @keyframes hwSegV { 0%{ opacity:0; transform: translateY(-12px); } 100%{ opacity:1; transform: translateY(0); } }
+  @keyframes hwArrV { 0%{ opacity:0; transform: translateY(-8px) rotate(90deg); } 100%{ opacity:1; transform: translateY(0) rotate(90deg); } }
 </style>
 </head>
 <body>
@@ -705,10 +774,10 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark">The Screenplay Registry</span>
+    <span class="brand"><img src="icon.svg" alt="" class="brand-mark">The Screenplay Registry</span>
     <nav aria-label="Primary">
-      <a href="/create/">Register</a>
-      <a href="/verify/">Verify</a>
+      <a href="create/">Register</a>
+      <a href="verify/">Verify</a>
       <a href="#tiers">Tiers</a>
       <a href="#faq">FAQ</a>
     </nav>
@@ -730,8 +799,8 @@
     </p>
 
     <div class="cta-buttons">
-      <a href="/create/" class="cta-btn primary"><span class="arrow">→</span> Create a proof</a>
-      <a href="/verify/" class="cta-btn secondary"><span class="arrow">→</span> Verify a proof</a>
+      <a href="create/" class="cta-btn primary"><span class="arrow">→</span> Create a proof</a>
+      <a href="verify/" class="cta-btn secondary"><span class="arrow">→</span> Verify a proof</a>
     </div>
 
     <div class="cta-secondary-links">
@@ -816,7 +885,7 @@
         <span class="badge live"><span class="dot"></span> Live</span>
         <h4>Bitcoin timestamp</h4>
         <p class="small">A 32-byte fingerprint of your draft, submitted to OpenTimestamps in about a minute; the Bitcoin confirmation follows within a few hours. The script stays on your machine, and nothing is published unless you ask.</p>
-        <div class="tier-cta"><a href="/create/"><span class="arrow">→</span> Create a proof</a></div>
+        <div class="tier-cta"><a href="create/"><span class="arrow">→</span> Create a proof</a></div>
       </div>
 
       <!-- Public index — SPECIFIED, NOT LIVE -->
@@ -860,7 +929,7 @@
         <div class="big-num">$45</div>
       </div>
       <div class="bill-cell ours">
-        <div class="tag"><img src="/icon.svg" alt="" class="tag-mark">TSR - Base Layer</div>
+        <div class="tag"><img src="icon.svg" alt="" class="tag-mark">TSR - Base Layer</div>
         <h4>Cryptographic timestamp</h4>
         <p class="small">A 32-byte fingerprint submitted to OpenTimestamps in about a minute, with Bitcoin confirmation a few hours later. The script stays on your machine. Use this <em>with</em> the Copyright Office, not instead of it.</p>
         <div class="big-num">$0</div>
@@ -1010,7 +1079,7 @@ proof.claimHash     <span class="cmt">// "sha256:9f2c4e7a…d771ba"</span>
 
   <footer>
     <div class="foot-logo">
-      <img src="/icon.svg" alt="The Screenplay Registry">
+      <img src="icon.svg" alt="The Screenplay Registry">
     </div>
     <div class="foot-grid">
       <div>
@@ -1045,6 +1114,12 @@ proof.claimHash     <span class="cmt">// "sha256:9f2c4e7a…d771ba"</span>
   </footer>
 
 </main>
+
+<!-- Sticky bottom action bar — mobile only (CSS-hidden on desktop) -->
+<nav class="actionbar" aria-label="Primary actions">
+  <a href="create/" class="primary"><span class="arrow">→</span> Create a proof</a>
+  <a href="verify/" class="secondary">Verify</a>
+</nav>
 
 <script>
   (function(){

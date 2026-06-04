@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="icon" type="image/svg+xml" href="/icon.svg" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="icon" type="image/svg+xml" href="../icon.svg" />
+<link rel="apple-touch-icon" href="../apple-touch-icon.png" />
 <title>Verify a proof — The Screenplay Registry</title>
 <meta name="description" content="Check a screenplay timestamp proof against the original file. Verification runs entirely in your browser. Nothing is uploaded." />
 <meta property="og:type" content="website" />
@@ -223,10 +223,14 @@
 
   @media (max-width: 760px) {
     .topbar-inner { flex-wrap: wrap; padding: 12px 20px; gap: 4px 18px; }
-    .topbar nav { gap: 18px; }
+    .topbar nav { gap: 16px; flex-wrap: wrap; }
     main { padding: 32px 20px 48px; }
     h1 { font-size: 28px; }
     .drop { padding: 36px 16px; }
+    button.action { padding: 17px; }
+    /* long filename wraps to its own line instead of truncating tightly */
+    .file-row { flex-wrap: wrap; gap: 2px 8px; }
+    .file-row .name { margin: 0; flex-basis: 100%; order: 3; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   }
 </style>
 </head>
@@ -234,10 +238,10 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark" /><a href="/">The Screenplay Registry</a></span>
+    <span class="brand"><img src="../icon.svg" alt="" class="brand-mark" /><a href="../">The Screenplay Registry</a></span>
     <nav>
-      <a href="/">Home</a>
-      <a href="/create/">Create a proof</a>
+      <a href="../">Home</a>
+      <a href="../create/">Create a proof</a>
       <a href="https://github.com/screenplay-registry/screenreg">GitHub</a>
     </nav>
   </div>

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<link rel="icon" type="image/svg+xml" href="/icon.svg" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="icon" type="image/svg+xml" href="../icon.svg" />
+<link rel="apple-touch-icon" href="../apple-touch-icon.png" />
 <title>Create a proof — The Screenplay Registry</title>
 <meta name="description" content="Create a private, dated cryptographic proof that your screenplay existed today. Anchored to Bitcoin via OpenTimestamps. Script never leaves your browser." />
 <meta property="og:type" content="website" />
@@ -380,9 +380,23 @@
   .pending-list .ph-status.confirmed { color: var(--ok); }
 
   @media (max-width: 760px) {
-    main { padding: 32px 20px; }
+    main { padding: 32px 20px 64px; }
     h1 { font-size: 28px; }
     .drop { padding: 36px 16px; }
+    /* topbar wraps onto two lines on phones */
+    .topbar-inner { flex-wrap: wrap; padding: 12px 20px; gap: 6px 18px; }
+    .topbar nav { gap: 16px; flex-wrap: wrap; }
+    /* primary action: full-width, comfortable tap target */
+    .compute-btn { width: 100%; justify-content: center; padding: 17px 24px; }
+    /* download buttons stack full-width */
+    .downloads .links { flex-direction: column; }
+    .download-btn { justify-content: center; }
+    /* encrypted title/author fields: stack label above input (override inline grid) */
+    #encryptInputs { grid-template-columns: 1fr !important; margin-left: 0 !important; gap: 4px 0 !important; }
+    #encryptInputs label { align-self: start !important; margin-top: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+    .ghost-actions { flex-direction: column; align-items: stretch; }
+    .ghost-actions .download-btn, .ghost-actions .ghost-btn { justify-content: center; text-align: center; }
+    footer { flex-direction: column; gap: 6px; }
   }
 </style>
 </head>
@@ -390,10 +404,10 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark" /><a href="/">The Screenplay Registry</a></span>
+    <span class="brand"><img src="../icon.svg" alt="" class="brand-mark" /><a href="../">The Screenplay Registry</a></span>
     <nav>
-      <a href="/">Home</a>
-      <a href="/verify/">Verify a proof</a>
+      <a href="../">Home</a>
+      <a href="../verify/">Verify a proof</a>
       <a href="https://github.com/screenplay-registry/screenreg">GitHub</a>
     </nav>
   </div>
@@ -498,7 +512,7 @@
         <a class="download-btn" id="downloadFinal" hidden><span>→</span> download confirmed proof</a>
       </div>
       <p class="ghost-resume" id="ghostResume" hidden>
-        Closing the tab? <button type="button" id="ghostCopy">Copy a link to finish later</button> — or just keep your files and re-drop the proof on the <a href="/verify/">verify page</a> anytime.
+        Closing the tab? <button type="button" id="ghostCopy">Copy a link to finish later</button> — or just keep your files and re-drop the proof on the <a href="../verify/">verify page</a> anytime.
       </p>
     </div>
   </section>
