@@ -495,6 +495,9 @@ async function verifyAll() {
     contentHash: contentsVerified ? contentHashHex : envelope.committedClaim?.contentHash,
     claimHash: claimHashHex,
     sceneCount: envelope.committedClaim.sceneCount,
+    // The field NAMES are non-secret; the values stay ciphertext. Surface their
+    // presence so an encrypted bundle isn't silent about them.
+    encryptedFieldNames: (envelope.committedClaim?.encryptedFields?.fields ?? []).map((f) => f.name),
   }
 }
 
@@ -525,9 +528,13 @@ function renderResult(r) {
     const integrityLine = bundleIntegrityIssues
       ? `\n⚠ Bundle checksum mismatch — the proof above verifies independently, but the .screenreg's own manifest digests did not match: ${escapeHtml(bundleIntegrityIssues.join('; '))}`
       : ''
+    // Encrypted title/author present? Announce it (names only) — never the values.
+    const encLine = r.encryptedFieldNames && r.encryptedFieldNames.length > 0
+      ? `Encrypted:        ${escapeHtml(r.encryptedFieldNames.join(', '))} 🔒 present as ciphertext — unlock with your password\n`
+      : ''
     resultEl.innerHTML = `<div class="result ${cls}"><h3>${symbol} ${escapeHtml(headline)}</h3>${contentsLine}
 Claim hash:       ${escapeHtml(r.claimHash)}
-${r.sceneCount !== undefined ? `Scene count:      ${escapeHtml(String(r.sceneCount))}\n` : ''}${bitcoinLine}${integrityLine}</div>`
+${r.sceneCount !== undefined ? `Scene count:      ${escapeHtml(String(r.sceneCount))}\n` : ''}${encLine}${bitcoinLine}${integrityLine}</div>`
   } else {
     const tx = r.transforms ? '\n\nNormalization transforms applied: ' + r.transforms.map((t) => `${escapeHtml(t.kind)}(${escapeHtml(String(t.count))})`).join(', ') : ''
     resultEl.innerHTML = `<div class="result err"><h3>✗ FAILED — ${escapeHtml(r.status)}</h3>${escapeHtml(r.detail || '')}${tx}</div>`

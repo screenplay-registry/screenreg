@@ -848,6 +848,14 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     ? `  Content hash:  ${recomputedContentHash}\n`
     : `  Content hash:  ${envelope.committedClaim.contentHash}  (from the record — screenplay not provided, so contents were NOT checked)\n`
   const claimLine = `  Claim hash:    ${recomputedClaimHash}\n`
+  // Surface encrypted fields (title/author) when present: the field NAMES are
+  // non-secret, the values stay ciphertext. So verify announces they exist and
+  // are unlockable, without ever displaying them.
+  const ef = envelope.committedClaim.encryptedFields
+  const encLine =
+    ef && ef.fields.length > 0
+      ? `  Encrypted:     ${ef.fields.map((f) => f.name).join(', ')} 🔒 present as ciphertext — unlock with your password (\`${CLI_NAME} decrypt-field\`)\n`
+      : ''
   const dateOnlyTag = contentsChecked ? '' : ', DATE ONLY'
   // Alternative external block-header check, for when no in-process source was
   // supplied: a bare .ots verifies directly; a bundle must be unpacked first so
@@ -876,6 +884,7 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     )
     process.stdout.write(contentLine)
     process.stdout.write(claimLine)
+    process.stdout.write(encLine)
     if (spv?.status === 'confirmed') {
       // Strongest result: the attested merkle root matches the real block header.
       for (const c of spv.confirmations) {
@@ -912,6 +921,7 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     }
     process.stdout.write(contentLine)
     process.stdout.write(claimLine)
+    process.stdout.write(encLine)
     process.stdout.write(
       `  Bitcoin block: PENDING — proof references calendars: ${otsResult.pendingCalendarUrls.join(', ')}\n` +
         `                 Run \`${CLI_NAME} finalize <ots|.screenreg>\` after ~1-6 hours to fold the\n` +
@@ -938,6 +948,7 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
   }
   process.stdout.write(contentLine)
   process.stdout.write(claimLine)
+  process.stdout.write(encLine)
   printEth()
   if (inputs.requireBitcoinAnchor) {
     process.stdout.write(`\n✗ FAILED — --require-bitcoin-anchor was set but the proof has no attestations.\n`)

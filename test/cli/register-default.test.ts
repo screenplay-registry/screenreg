@@ -151,6 +151,32 @@ describe('CLI: register default = single .screenreg (S-C)', () => {
     expect(existsSync(join(tmp, 'draft.screenreg'))).toBe(false)
   })
 
+  it('verify surfaces encrypted title/author presence — names only, never the values', () => {
+    const reg = runCli([
+      'register', script, '--mock',
+      '--encrypt-title', 'My Secret Title',
+      '--encrypt-author', 'Jane Q Writer',
+      '--password', 'correct-horse-battery-staple',
+    ])
+    expect(reg.code).toBe(0)
+    const v = runCli(['verify', join(tmp, 'draft.screenreg')])
+    expect(v.code).toBe(0)
+    expect(v.stdout).toMatch(/Encrypted:/)
+    expect(v.stdout).toMatch(/title/)
+    expect(v.stdout).toMatch(/author/)
+    expect(v.stdout).toMatch(/🔒/)
+    // the plaintext values must NEVER appear in verify output
+    expect(v.stdout).not.toContain('My Secret Title')
+    expect(v.stdout).not.toContain('Jane Q Writer')
+  })
+
+  it('verify does NOT show an Encrypted line when there are no encrypted fields', () => {
+    runCli(['register', script, '--mock'])
+    const v = runCli(['verify', join(tmp, 'draft.screenreg')])
+    expect(v.code).toBe(0)
+    expect(v.stdout).not.toMatch(/Encrypted:/)
+  })
+
   it('--identity writes the private key as a separate .pem, never inside the .screenreg', () => {
     const keyOut = join(tmp, 'key.pem')
     const reg = runCli(['register', script, '--mock', '--identity', '--identity-key-out', keyOut])
