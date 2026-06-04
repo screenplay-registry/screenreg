@@ -10,6 +10,7 @@ import {
   reverseHexBytes,
   verifyAttestationAgainstHeader,
   verifyAttestationWithSource,
+  verifyAttestationsWithSources,
   type BitcoinBlockHeader,
   type BitcoinHeaderSource,
 } from '../../src/anchors/bitcoin-spv.js'
@@ -146,6 +147,70 @@ describe('verifyAttestationWithSource', () => {
       expect(v.fetchFailed).toBe(true)
       expect(v.reason).toMatch(/could not fetch/)
     }
+  })
+})
+
+describe('verifyAttestationsWithSources (orchestration)', () => {
+  const internal = reverseHexBytes(GENESIS_MERKLE_DISPLAY)
+  const att = { blockHeight: 0, merkleRoot: internal }
+
+  const matching = (label: string, trustless: boolean): BitcoinHeaderSource => ({
+    label,
+    trustless,
+    getBlockHeaderByHeight: async (height) => ({ height, merkleRoot: GENESIS_MERKLE_DISPLAY, blockHash: GENESIS_HASH }),
+  })
+  const mismatching: BitcoinHeaderSource = {
+    label: 'liar',
+    trustless: false,
+    getBlockHeaderByHeight: async (height) => ({ height, merkleRoot: 'f'.repeat(64) }),
+  }
+  const unreachable = (label: string): BitcoinHeaderSource => ({
+    label,
+    trustless: true,
+    getBlockHeaderByHeight: async () => {
+      throw new Error('ECONNREFUSED')
+    },
+  })
+
+  it('confirms when a source matches, recording trust', async () => {
+    const r = await verifyAttestationsWithSources([att], [matching('your node (x)', true)])
+    expect(r.status).toBe('confirmed')
+    if (r.status === 'confirmed') {
+      expect(r.confirmations).toHaveLength(1)
+      expect(r.confirmations[0]!.trustless).toBe(true)
+    }
+  })
+
+  it('falls back to a later source when an earlier one is unreachable', async () => {
+    const r = await verifyAttestationsWithSources([att], [unreachable('node'), matching('mempool.space', false)])
+    expect(r.status).toBe('confirmed')
+    if (r.status === 'confirmed') expect(r.confirmations[0]!.sourceLabel).toBe('mempool.space')
+  })
+
+  it('reports mismatch (hard fail) and short-circuits past a would-confirm source', async () => {
+    const r = await verifyAttestationsWithSources([att], [mismatching, matching('node', true)])
+    expect(r.status).toBe('mismatch')
+  })
+
+  it('reports unreachable when every source fails to fetch', async () => {
+    const r = await verifyAttestationsWithSources([att], [unreachable('a'), unreachable('b')])
+    expect(r.status).toBe('unreachable')
+  })
+
+  it('mismatch precedence is global: a later forged attestation is NOT masked by an earlier unreachable one', async () => {
+    // A source that 404s for one height (unreachable) but returns a wrong root for another (mismatch).
+    const heightAware: BitcoinHeaderSource = {
+      label: 'partial',
+      trustless: false,
+      getBlockHeaderByHeight: async (height) => {
+        if (height === 0) throw new Error('not found') // attestation #1: unreachable
+        return { height, merkleRoot: 'f'.repeat(64) } // attestation #2: forged → mismatch
+      },
+    }
+    const attUnreachableFirst = { blockHeight: 0, merkleRoot: internal }
+    const attForgedSecond = { blockHeight: 5, merkleRoot: internal }
+    const r = await verifyAttestationsWithSources([attUnreachableFirst, attForgedSecond], [heightAware])
+    expect(r.status).toBe('mismatch')
   })
 })
 

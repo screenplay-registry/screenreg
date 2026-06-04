@@ -134,6 +134,28 @@ describe('CLI: verify <file.screenreg> (browser parity)', () => {
     expect(v.code).not.toBe(0)
   })
 
+  it('rejects an unknown --explorer value', () => {
+    runCli(['register', script, '--mock'])
+    const v = runCli(['verify', join(tmp, 'draft.screenreg'), '--explorer', 'bogus'])
+    expect(v.code).not.toBe(0)
+    expect(v.stderr).toMatch(/--explorer must be mempool or blockstream/)
+  })
+
+  it('rejects --bitcoin-rpc-cookie without --bitcoin-rpc', () => {
+    runCli(['register', script, '--mock'])
+    const v = runCli(['verify', join(tmp, 'draft.screenreg'), '--bitcoin-rpc-cookie', '/tmp/x'])
+    expect(v.code).not.toBe(0)
+    expect(v.stderr).toMatch(/--bitcoin-rpc-cookie requires --bitcoin-rpc/)
+  })
+
+  it('accepts SPV flags on a pending proof without attempting a network call (no bitcoin attestation yet)', () => {
+    runCli(['register', script, '--mock'])
+    // mock proof is calendar-pending → no bitcoin attestation → SPV is skipped, no fetch to the bogus URL.
+    const v = runCli(['verify', join(tmp, 'draft.screenreg'), '--bitcoin-rpc', 'http://127.0.0.1:1'])
+    expect(v.code).toBe(0)
+    expect(v.stdout).toMatch(/VERIFIED \(PENDING\)/)
+  })
+
   // Loose 3-file verification must still work for integrators.
   it('still verifies the loose 3-file artifacts', () => {
     runCli(['register', script, '--mock', '--loose'])

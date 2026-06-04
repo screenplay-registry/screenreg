@@ -60,6 +60,8 @@ import {
 import type { Envelope as SharedEnvelope } from '../shared/envelope/types.js'
 import { BANNER } from './banner.js'
 import { startSpinner, formatDuration, countdownSleep } from './progress.js'
+import { verifyAttestationsWithSources, type BitcoinHeaderSource, type SpvOutcome } from '../anchors/bitcoin-spv.js'
+import { makeBitcoinRpcSource, makeExplorerSource, type ExplorerName } from '../anchors/bitcoin-header-sources.js'
 import {
   buildEncryptedFieldsBlock,
   decryptFieldsBlock,
@@ -653,6 +655,8 @@ interface VerifyOptions {
   ethRpc?: string
   /** Confirmations required for the Ethereum anchor to count as final. */
   ethMinConfirmations?: number
+  /** Bitcoin block-header sources for SPV; tried in order (node first, explorer fallback). */
+  headerSources?: BitcoinHeaderSource[]
 }
 
 /** The subset of verify options the optional Ethereum-anchor report reads. */
@@ -681,6 +685,8 @@ interface VerifyCoreInputs {
   ethRpc?: string
   ethMinConfirmations?: number
   verbose?: boolean
+  /** Bitcoin block-header sources for SPV; tried in order (node first, explorer fallback). */
+  headerSources?: BitcoinHeaderSource[]
 }
 
 interface VerifyBundleOptions {
@@ -691,6 +697,7 @@ interface VerifyBundleOptions {
   ethRpc?: string
   ethMinConfirmations?: number
   verbose?: boolean
+  headerSources?: BitcoinHeaderSource[]
 }
 
 /**
@@ -803,6 +810,29 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     process.exit(2)
   }
 
+  // 4b. Optional SPV: confirm the attested merkle root against real Bitcoin block
+  // headers (a local node and/or public explorers). A genuine MISMATCH means the
+  // proof claims an attestation the block does not bear — that is a hard failure.
+  // An unreachable source degrades to informational (never fail a valid proof on
+  // a network hiccup), like a pending proof or an unreachable ETH RPC.
+  let spv: SpvOutcome | undefined
+  if (inputs.headerSources && inputs.headerSources.length > 0 && otsResult.bitcoinAttestations.length > 0) {
+    const stopSpv = startSpinner('Verifying the merkle root against Bitcoin block headers…')
+    try {
+      spv = await verifyAttestationsWithSources(otsResult.bitcoinAttestations, inputs.headerSources)
+    } finally {
+      stopSpv()
+    }
+    if (spv.status === 'mismatch') {
+      process.stdout.write(
+        `✗ FAILED — the proof does NOT match Bitcoin\n` +
+          `  ${spv.reason}\n` +
+          `  The .ots proof claims a Bitcoin attestation that the real block does not bear; it is invalid.\n`,
+      )
+      process.exit(2)
+    }
+  }
+
   // 5. Optional Ethereum-anchor check (INFORMATIONAL). The envelope is otherwise
   // Bitcoin-valid here; the ETH anchor is a secondary witness and its result
   // never changes the verdict below or the exit status. We compute it once and
@@ -819,25 +849,23 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     : `  Content hash:  ${envelope.committedClaim.contentHash}  (from the record — screenplay not provided, so contents were NOT checked)\n`
   const claimLine = `  Claim hash:    ${recomputedClaimHash}\n`
   const dateOnlyTag = contentsChecked ? '' : ', DATE ONLY'
-  // Independent-block-header hint: a bare .ots verifies directly; a bundle must
-  // be unpacked first so upstream `ots verify` has a .ots to read.
+  // Alternative external block-header check, for when no in-process source was
+  // supplied: a bare .ots verifies directly; a bundle must be unpacked first so
+  // upstream `ots verify` has a .ots to read.
   const upstreamHint = inputs.otsHintIsBundle
-    ? `        verification, run \`${CLI_NAME} unpack ${inputs.otsHintPath} --out-dir out\` then upstream\n` +
-      `        \`ots verify out/proof.ots\` against the opentimestamps-client. Full in-process\n` +
-      `        SPV ships in v0.2.\n`
-    : `        verification, run upstream \`ots verify ${inputs.otsHintPath}\` against the\n` +
-      `        opentimestamps-client. Full in-process SPV ships in v0.2.\n`
+    ? `        run \`${CLI_NAME} unpack ${inputs.otsHintPath} --out-dir out\` then upstream\n` +
+      `        \`ots verify out/proof.ots\` against the opentimestamps-client.\n`
+    : `        run upstream \`ots verify ${inputs.otsHintPath}\` against the opentimestamps-client.\n`
 
   // Status headline distinguishes Bitcoin-attestation-present vs pending vs
   // no-attestations, and contents-verified vs date-only. A casual reader who
   // stops at the first line MUST get the right impression of verification
   // strength.
   //
-  // IMPORTANT: this verifier parses the OTS proof structure and CONFIRMS that
-  // a Bitcoin block-header attestation is referenced. It does NOT independently
-  // fetch + verify the Bitcoin block headers themselves (full SPV ships in v0.2
-  // per the README roadmap). So the headline says "Bitcoin attestation present"
-  // — accurate to what we actually verified — and points the user at upstream
+  // When --bitcoin-rpc/--explorer is supplied, this verifier fetches the real
+  // block header and confirms the attested merkle root (step 4b); a mismatch
+  // already exited above. Without a source it checks only the OTS proof
+  // structure and says so, pointing the user at the in-process flags or upstream
   // `ots verify` for true block-header verification.
   if (otsResult.bitcoinAnchored) {
     process.stdout.write(
@@ -848,12 +876,30 @@ async function verifyCore(inputs: VerifyCoreInputs): Promise<void> {
     )
     process.stdout.write(contentLine)
     process.stdout.write(claimLine)
-    process.stdout.write(
-      `  Bitcoin attestation: block heights ${otsResult.bitcoinBlockHeights.join(', ')} (parsed from .ots structure)\n` +
-        `  NOTE: this verifier does NOT fetch + verify Bitcoin block headers in v0.x —\n` +
-        `        only the OTS proof structure was checked. For independent block-header\n` +
-        upstreamHint,
-    )
+    if (spv?.status === 'confirmed') {
+      // Strongest result: the attested merkle root matches the real block header.
+      for (const c of spv.confirmations) {
+        const trust = c.trustless ? 'trustless — your own node' : `trusting ${c.sourceLabel}`
+        process.stdout.write(
+          `  Bitcoin block ${c.blockHeight}: merkle root CONFIRMED against the block header via ${c.sourceLabel} (${trust}).\n`,
+        )
+      }
+    } else if (spv?.status === 'unreachable') {
+      process.stdout.write(
+        `  Bitcoin attestation: block heights ${otsResult.bitcoinBlockHeights.join(', ')} (parsed from .ots structure)\n` +
+          `  NOTE: could not reach a block-header source to confirm the merkle root —\n` +
+          `        ${spv.reason}.\n` +
+          `        The structure-only result stands; retry with a reachable --bitcoin-rpc/--explorer.\n`,
+      )
+    } else {
+      process.stdout.write(
+        `  Bitcoin attestation: block heights ${otsResult.bitcoinBlockHeights.join(', ')} (parsed from .ots structure)\n` +
+          `  NOTE: only the OTS proof structure was checked. To confirm the merkle root against\n` +
+          `        real Bitcoin block headers, re-run with --bitcoin-rpc <url> (your own node,\n` +
+          `        trustless) or --explorer mempool|blockstream. For an external check instead,\n` +
+          upstreamHint,
+      )
+    }
     printEth()
     process.exit(0)
   }
@@ -914,6 +960,7 @@ async function cmdVerify(opts: VerifyOptions): Promise<void> {
     ...(opts.ethRpc !== undefined ? { ethRpc: opts.ethRpc } : {}),
     ...(opts.ethMinConfirmations !== undefined ? { ethMinConfirmations: opts.ethMinConfirmations } : {}),
     ...(opts.verbose !== undefined ? { verbose: opts.verbose } : {}),
+    ...(opts.headerSources !== undefined ? { headerSources: opts.headerSources } : {}),
   })
 }
 
@@ -961,6 +1008,7 @@ async function cmdVerifyBundle(opts: VerifyBundleOptions): Promise<void> {
     ...(opts.ethRpc !== undefined ? { ethRpc: opts.ethRpc } : {}),
     ...(opts.ethMinConfirmations !== undefined ? { ethMinConfirmations: opts.ethMinConfirmations } : {}),
     ...(opts.verbose !== undefined ? { verbose: opts.verbose } : {}),
+    ...(opts.headerSources !== undefined ? { headerSources: opts.headerSources } : {}),
   })
 }
 
@@ -2155,7 +2203,8 @@ function printUsage(): void {
                        always writes the private key as a separate .pem (never in a bundle).
   ${CLI_NAME} verify <file.screenreg> [screenplay]
   ${CLI_NAME} verify <file> <envelope> <ots>
-                       [--require-bitcoin-anchor] [--eth-rpc URL] [--eth-min-confirmations N]
+                       [--require-bitcoin-anchor] [--bitcoin-rpc URL] [--bitcoin-rpc-cookie PATH]
+                       [--explorer mempool|blockstream] [--eth-rpc URL] [--eth-min-confirmations N]
                        Verify a single .screenreg (contents confirmed from the
                        embedded screenplay; a proof-only bundle verifies the date,
                        add the screenplay to also confirm contents) — or the loose
@@ -2164,6 +2213,14 @@ function printUsage(): void {
                        --require-bitcoin-anchor: exit 2 unless the proof has been
                        upgraded to a Bitcoin block attestation (use in CI / scripts
                        that must gate on independent Bitcoin verifiability).
+                       --bitcoin-rpc URL: confirm the attested merkle root against
+                       real block headers from your own Bitcoin Core node (TRUSTLESS;
+                       a pruned node works, no wallet). Auth via --bitcoin-rpc-cookie
+                       <.cookie path> or rpcuser:rpcpassword in the URL; URL/cookie
+                       also read from BITCOIN_RPC_URL / BITCOIN_RPC_COOKIE. A merkle-
+                       root MISMATCH fails (exit 2); an unreachable node is
+                       informational. --explorer mempool|blockstream: same check via
+                       a public explorer (TRUSTED third party), usable as a fallback.
                        --eth-rpc URL: if the envelope carries an ethereum-anchor
                        proof, also check it on-chain (topics-only) and print the
                        result as INFORMATIONAL. The Ethereum anchor is a secondary
@@ -2666,6 +2723,9 @@ async function main(): Promise<void> {
       let requireBitcoinAnchor = false
       let ethRpc: string | undefined
       let ethMinConfirmations: number | undefined
+      let bitcoinRpc: string | undefined
+      let bitcoinRpcCookie: string | undefined
+      let explorer: ExplorerName | undefined
       for (let i = 0; i < rest.length; i++) {
         const a = rest[i]!
         if (a === '--require-bitcoin-anchor') requireBitcoinAnchor = true
@@ -2677,8 +2737,35 @@ async function main(): Promise<void> {
           const n = Number.parseInt(rest[++i]!, 10)
           if (!Number.isInteger(n) || n < 1) die('--eth-min-confirmations must be a positive integer')
           ethMinConfirmations = n
+        } else if (a === '--bitcoin-rpc') {
+          if (rest[i + 1] === undefined) die('--bitcoin-rpc requires a URL argument')
+          bitcoinRpc = rest[++i]
+        } else if (a === '--bitcoin-rpc-cookie') {
+          if (rest[i + 1] === undefined) die('--bitcoin-rpc-cookie requires a path argument')
+          bitcoinRpcCookie = rest[++i]
+        } else if (a === '--explorer') {
+          const v = rest[++i]
+          if (v !== 'mempool' && v !== 'blockstream') die('--explorer must be mempool or blockstream')
+          explorer = v
         } else positional.push(a)
       }
+
+      // Build the SPV header sources, tried in order: a local node first (trustless),
+      // then a public explorer as fallback. URL/cookie also fall back to env vars.
+      const headerSources: BitcoinHeaderSource[] = []
+      const rpcUrl = bitcoinRpc ?? process.env.BITCOIN_RPC_URL
+      const rpcCookie = bitcoinRpcCookie ?? process.env.BITCOIN_RPC_COOKIE
+      if (rpcUrl) {
+        try {
+          headerSources.push(makeBitcoinRpcSource({ url: rpcUrl, ...(rpcCookie ? { cookiePath: rpcCookie } : {}) }))
+        } catch (err) {
+          die(`verify: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      } else if (bitcoinRpcCookie !== undefined) {
+        die('verify: --bitcoin-rpc-cookie requires --bitcoin-rpc (or BITCOIN_RPC_URL)')
+      }
+      if (explorer) headerSources.push(makeExplorerSource(explorer))
+
       const first = positional[0]
       if (first === undefined) {
         die('verify: need <file.screenreg>, or <file> <envelope> <ots> for loose artifacts')
@@ -2692,6 +2779,7 @@ async function main(): Promise<void> {
           requireBitcoinAnchor,
           ...(ethRpc !== undefined ? { ethRpc } : {}),
           ...(ethMinConfirmations !== undefined ? { ethMinConfirmations } : {}),
+          ...(headerSources.length > 0 ? { headerSources } : {}),
         })
         return
       }
@@ -2705,6 +2793,7 @@ async function main(): Promise<void> {
         requireBitcoinAnchor,
         ...(ethRpc !== undefined ? { ethRpc } : {}),
         ...(ethMinConfirmations !== undefined ? { ethMinConfirmations } : {}),
+        ...(headerSources.length > 0 ? { headerSources } : {}),
       })
       return
     }

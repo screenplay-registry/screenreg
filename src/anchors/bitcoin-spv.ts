@@ -135,3 +135,47 @@ export async function verifyAttestationWithSource(
   }
   return verifyAttestationAgainstHeader(att, header)
 }
+
+export type SpvOutcome =
+  | { status: 'confirmed'; confirmations: { blockHeight: number; sourceLabel: string; trustless: boolean }[] }
+  | { status: 'mismatch'; blockHeight: number; reason: string }
+  | { status: 'unreachable'; reason: string }
+
+/**
+ * Verify every Bitcoin attestation against the given sources, in order. Each
+ * attestation must be confirmed by at least one source; sources are tried in
+ * order so a trustless local node can be listed first with a public explorer as
+ * fallback. A genuine merkle-root MISMATCH from any source short-circuits to
+ * `mismatch` (the proof is invalid). If an attestation cannot be reached at any
+ * source (all fetches failed), the outcome is `unreachable` (degrade to
+ * informational — never fail an otherwise-valid proof on a network hiccup).
+ */
+export async function verifyAttestationsWithSources(
+  attestations: { blockHeight: number; merkleRoot: string }[],
+  sources: BitcoinHeaderSource[],
+): Promise<SpvOutcome> {
+  const confirmations: { blockHeight: number; sourceLabel: string; trustless: boolean }[] = []
+  let unreachableReason: string | undefined
+  for (const att of attestations) {
+    let confirmed = false
+    let lastReason = `block ${att.blockHeight} could not be reached at any source`
+    for (const source of sources) {
+      const v = await verifyAttestationWithSource(att, source)
+      if (v.ok) {
+        confirmations.push({ blockHeight: att.blockHeight, sourceLabel: source.label, trustless: source.trustless })
+        confirmed = true
+        break
+      }
+      // Mismatch precedence is GLOBAL: a genuine merkle mismatch on ANY attestation
+      // means the proof is forged — return immediately, regardless of whether other
+      // attestations were unreachable. (Don't let an unreachable attestation earlier
+      // in the list mask a forged-but-reachable attestation later.)
+      if (!v.fetchFailed) return { status: 'mismatch', blockHeight: att.blockHeight, reason: v.reason }
+      lastReason = v.reason
+    }
+    // Record but DO NOT return on unreachable — keep scanning later attestations for a mismatch.
+    if (!confirmed) unreachableReason = lastReason
+  }
+  if (unreachableReason !== undefined) return { status: 'unreachable', reason: unreachableReason }
+  return { status: 'confirmed', confirmations }
+}
