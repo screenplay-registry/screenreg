@@ -1,22 +1,21 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<link rel="icon" type="image/svg+xml" href="/icon.svg" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>The Screenplay Registry — Free, private, permanent proof your screenplay existed</title>
-<meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment." />
-<meta property="og:type" content="website" />
-<meta property="og:site_name" content="The Screenplay Registry" />
-<meta property="og:title" content="The Screenplay Registry" />
-<meta property="og:description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer." />
-<meta property="og:url" content="https://screenplayregistry.org/" />
-<meta property="og:image" content="https://screenplayregistry.org/og.png" />
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="The Screenplay Registry" />
-<meta name="twitter:card" content="summary_large_image" />
+<meta name="description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer. No account, no upload, no payment.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Screenplay Registry">
+<meta property="og:title" content="The Screenplay Registry">
+<meta property="og:description" content="Create a free, private, permanent proof that your screenplay existed before you shared it. Anchored to Bitcoin via OpenTimestamps, right in your browser — your script never leaves your computer.">
+<meta property="og:url" content="https://screenplayregistry.org/">
+<meta property="og:image" content="https://screenplayregistry.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Screenplay Registry">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   :root {
     --bg: #f6f5f0;
@@ -31,7 +30,9 @@
     --accent-dark: #6e1a10;
     --accent-soft: rgba(179, 38, 26, 0.08);
     --gold: #c89a3a;
+    --gold-hi: #e3c069;
     --code-bg: #ece8dc;
+    --measure: 44rem;        /* single reading measure; fills the content column */
   }
   * { box-sizing: border-box; }
   html { background: var(--bg); }
@@ -97,20 +98,23 @@
 
   main { max-width: 1080px; margin: 0 auto; padding: 48px 28px 0; }
 
-  /* HERO — RFC abstract style */
-  .hero { padding-bottom: 64px; border-bottom: 1px solid var(--rule); }
-  .hero .num { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+  /* HERO — unconstrained: full-width block, marker sits above the headline */
+  .hero {
+    padding-bottom: 64px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .hero .num { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 18px; }
   h1 {
     font-size: clamp(38px, 5.5vw, 64px);
     line-height: 1.02;
     letter-spacing: -0.025em;
     margin: 0 0 28px;
     font-weight: 500;
-    max-width: 20ch;
+    max-width: 24ch;
   }
   h1 em { font-style: italic; color: var(--accent); }
   .abstract {
-    max-width: 64ch;
+    max-width: var(--measure);
     font-size: 19px;
     line-height: 1.6;
     margin-bottom: 32px;
@@ -196,7 +200,7 @@
   }
 
   .cta-secondary-links {
-    margin-top: 20px;
+    margin-top: 40px;
     display: flex;
     flex-wrap: wrap;
     gap: 24px;
@@ -228,11 +232,12 @@
   .metabox dt { color: var(--muted); }
   .metabox dd { margin: 0; }
 
-  /* sections */
+  /* sections — marker sits above the heading; one content column aligned to the page's left margin */
   section.s {
     padding: 72px 0;
     border-bottom: 1px solid var(--rule);
   }
+  section.s > * { max-width: var(--measure); }
   section.s.dark, section.s.tinted {
     background: #e6e1d2;
     color: var(--ink);
@@ -263,21 +268,49 @@
   }
   section.s > h2 em { font-style: italic; color: var(--accent); }
   section.s.dark > h2 em { color: var(--gold); }
-  section.s p { max-width: 68ch; margin: 0 0 14px; }
+  section.s p { max-width: var(--measure); margin: 0 0 14px; }
 
-  /* HOW IT WORKS — 2D animated SVG diagram */
-  .diagram-2d {
-    margin: 32px 0 28px;
-    border: 1px solid var(--rule);
-    background: var(--paper);
-    padding: 24px;
+  /* HOW IT WORKS — accumulating pipeline diagram */
+  .hw-stage { position: relative; border: 1px solid var(--rule); background: var(--paper); overflow: hidden; padding: 30px 24px; margin: 32px 0 28px; }
+  .hw-stage::before { content:""; position:absolute; inset:0; pointer-events:none; background-image: linear-gradient(rgba(200,154,58,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(200,154,58,0.05) 1px, transparent 1px); background-size: 28px 28px; }
+  .hw-stage .flow { position: relative; display: flex; align-items: center; justify-content: center; min-height: 150px; }
+  .hw-stage .node { display:flex; flex-direction:column; align-items:center; gap:10px; flex:none; }
+  .hw-stage .node .cap { font-family: ui-monospace, Menlo, monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color: var(--muted); }
+  .hw-stage .node.script .cap { color: var(--accent); }
+  .hw-stage .seg { display:flex; align-items:center; overflow:hidden; }
+  .hw-stage .seg .arr { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size:24px; padding:0 16px; flex:none; }
+  .hw-stage .g-script { width:64px; height:84px; background:var(--paper); border:1.5px solid var(--ink); padding:11px 10px; display:flex; flex-direction:column; gap:6px; }
+  .hw-stage .g-script i { display:block; height:3px; background:#cfc8b8; border-radius:2px; }
+  .hw-stage .g-script i:nth-child(1){ width:60%; background:var(--accent); }
+  .hw-stage .g-script i:nth-child(3){ width:45%; } .hw-stage .g-script i:nth-child(5){ width:70%; }
+  .hw-stage .g-hash { width:84px; height:84px; background:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
+  .hw-stage .g-hash svg { width:17px; height:17px; }
+  .hw-stage .g-hash .hx { font-family: ui-monospace, Menlo, monospace; font-size:9.5px; color:#e3c069; letter-spacing:0.04em; }
+  .hw-stage .g-block { width:84px; height:84px; position:relative; border:1.5px solid var(--ink); }
+  .hw-stage .g-block span { position:absolute; width:18px; height:18px; border:1px solid var(--gold); }
+  .hw-stage .g-block span.f { background: var(--gold); }
+  .hw-stage .g-files { display:flex; flex-direction:column; gap:8px; }
+  .hw-stage .g-files .f { width:174px; padding:9px 12px; border:1.5px solid var(--ink); background:var(--paper); position:relative; display:flex; align-items:center; gap:8px; }
+  .hw-stage .g-files .f .lab { font-family: ui-monospace, Menlo, monospace; font-size:11px; }
+  .hw-stage .g-files .f .sub { font-family: ui-monospace, Menlo, monospace; font-size:9px; color: var(--muted); margin-left:auto; }
+  .hw-stage .g-files .f svg { width:15px; height:15px; flex:none; }
+  .hw-stage .g-files .f.share { border-color: var(--gold); } .hw-stage .g-files .f.share .lab { color: var(--accent-dark); }
+  .hw-stage .g-files .f.priv { border-color: var(--accent); background:#fbf3f1; } .hw-stage .g-files .f.priv .lab { color: var(--accent); }
+  @media (prefers-reduced-motion: no-preference){
+    .hw-stage:not(.run) .node.script { opacity: 0; }
+    .hw-stage:not(.run) .seg { max-width: 0; opacity: 0; }
+    .hw-stage.run .node.script { animation: hwPop .7s ease both; }
+    .hw-stage.run .seg { animation: hwSeg .8s cubic-bezier(.2,.7,.3,1) both; }
+    .hw-stage.run .seg.s2 { animation-delay: 2s; } .hw-stage.run .seg.s3 { animation-delay: 4s; } .hw-stage.run .seg.s4 { animation-delay: 6s; }
+    .hw-stage.run .seg.s2 .node { animation: hwPop .6s ease both 2.25s; }
+    .hw-stage.run .seg.s3 .node { animation: hwPop .6s ease both 4.25s; }
+    .hw-stage.run .seg.s4 .node { animation: hwPop .6s ease both 6.25s; }
+    .hw-stage.run .seg .arr { animation: hwArr .5s ease both; }
+    .hw-stage.run .seg.s2 .arr { animation-delay: 2s; } .hw-stage.run .seg.s3 .arr { animation-delay: 4s; } .hw-stage.run .seg.s4 .arr { animation-delay: 6s; }
   }
-  .diagram-2d svg {
-    display: block;
-    width: 100%;
-    height: auto;
-    max-height: 320px;
-  }
+  @keyframes hwSeg { 0%{max-width:0;opacity:0;} 60%{opacity:1;} 100%{max-width:340px;opacity:1;} }
+  @keyframes hwPop { 0%{opacity:0;transform:scale(.7);} 100%{opacity:1;transform:scale(1);} }
+  @keyframes hwArr { 0%{opacity:0;transform:translateX(-8px);} 100%{opacity:1;transform:translateX(0);} }
   .step-labels {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -310,6 +343,13 @@
     gap: 0;
     margin-top: 24px;
     border-top: 2px solid var(--ink);
+  }
+  /* "How it fits" and "The layers" tri-columns intentionally break the reading
+     measure so the 3 columns get equal, roomier width — matched between sections. */
+  #bill .bill-grid,
+  #tiers .bill-grid {
+    max-width: none;
+    width: calc(var(--measure) + 150px);
   }
   .bill-cell {
     padding: 32px 28px;
@@ -438,7 +478,7 @@
     margin-top: 22px;
     padding-top: 18px;
     border-top: 1px solid var(--rule);
-    max-width: 68ch;
+    max-width: var(--measure);
     font-size: 15px;
     color: var(--muted);
   }
@@ -449,12 +489,22 @@
     text-transform: uppercase;
     margin: 0;
     color: var(--muted);
+    line-height: 1.35;
+    min-height: 2.7em;       /* reserve up to 2 lines so headings align across cells */
+  }
+  .bill-cell .tag .tag-mark {
+    width: 14px;
+    height: 14px;
+    vertical-align: -3px;
+    margin-right: 7px;
   }
   .bill-cell h4 {
     font-size: 22px;
     margin: 0;
     letter-spacing: -0.01em;
     font-weight: 600;
+    line-height: 1.15;
+    min-height: 2.3em;       /* reserve up to 2 lines so body + price align across cells */
   }
   .bill-cell .small {
     font-size: 14.5px;
@@ -514,39 +564,65 @@
   pre.block .k { color: var(--accent); }
   pre.block .s { color: #2c6a3e; }
 
+  /* tabbed mock console (CSS-only, no inline JS) */
+  .console { margin: 18px 0 4px; border: 1px solid var(--rule); }
+  .console .tabin { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .console .tabs { display: flex; background: var(--paper); border-bottom: 1px solid var(--rule); }
+  .console .tabs label {
+    padding: 13px 20px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; letter-spacing: 0.02em;
+    color: var(--muted); cursor: pointer; border-right: 1px solid var(--rule); display: inline-flex; align-items: center; gap: 9px;
+    transition: background 90ms, color 90ms;
+  }
+  .console .tabs label .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong, #aab1bd); flex: none; }
+  .console .tabs label:hover { color: var(--ink); }
+  .console .panes { background: var(--ink); }
+  .console .pane { display: none; margin: 0; padding: 22px 24px; overflow-x: auto; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.7; color: #d8d3c6; }
+  .console .pane .c { color: #8a8475; }
+  .console .pane .k { color: var(--gold-hi); }
+  .console .pane .v { color: #f3efe4; }
+  .console .pane .s { color: #9ec9a6; }
+  .console .pane .cmt { color: #6f6a5d; }
+  /* active states */
+  #tab-dev:checked ~ .tabs label[for="tab-dev"],
+  #tab-cli:checked ~ .tabs label[for="tab-cli"] { background: var(--ink); color: var(--paper); }
+  #tab-dev:checked ~ .tabs label[for="tab-dev"] .dot,
+  #tab-cli:checked ~ .tabs label[for="tab-cli"] .dot { background: var(--gold); }
+  #tab-dev:checked ~ .panes .pane-dev,
+  #tab-cli:checked ~ .panes .pane-cli { display: block; }
+  .console .tabin:focus-visible ~ .tabs label { outline: 2px solid var(--gold); outline-offset: -2px; }
+
   /* FAQ — native <details>, no script (CSP-safe on this page) */
   .faq { margin-top: 28px; border-top: 1px solid var(--rule); }
   .faq details { border-bottom: 1px solid var(--rule-soft); }
   .faq summary {
     cursor: pointer;
-    padding: 20px 0;
+    padding: 20px 36px 20px 0;
+    position: relative;
     font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, ui-monospace, monospace;
     font-weight: 600;
     font-size: 18px;
     line-height: 1.4;
     color: var(--ink);
     list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 20px;
     transition: color 80ms;
   }
   .faq summary::-webkit-details-marker { display: none; }
   .faq summary::after {
     content: "+";
+    position: absolute;
+    right: 0;
+    top: 20px;
     color: var(--accent);
     font-family: ui-monospace, Menlo, monospace;
     font-weight: 400;
     font-size: 22px;
-    flex: none;
     line-height: 1;
   }
   .faq details[open] summary::after { content: "\2013"; }
   .faq summary:hover { color: var(--accent); }
   .faq .a {
     padding: 0 0 22px;
-    max-width: 68ch;
+    max-width: var(--measure);
     color: var(--ink-soft);
     font-size: 16.5px;
   }
@@ -557,6 +633,19 @@
   footer {
     padding: 56px 0 28px;
     color: var(--muted);
+  }
+  .foot-logo {
+    display: flex;
+    justify-content: center;
+    padding-bottom: 44px;
+    margin-bottom: 44px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .foot-logo img {
+    width: 64px;
+    height: 64px;
+    display: block;
+    opacity: 0.9;
   }
   .foot-grid {
     display: grid;
@@ -612,9 +701,11 @@
 </head>
 <body>
 
+
+
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark" />The Screenplay Registry</span>
+    <span class="brand"><img src="/icon.svg" alt="" class="brand-mark">The Screenplay Registry</span>
     <nav aria-label="Primary">
       <a href="/create/">Register</a>
       <a href="/verify/">Verify</a>
@@ -630,12 +721,12 @@
   <!-- HERO -->
   <section class="hero" aria-label="Abstract">
     <div class="num">A public protocol for private screenplay proofs</div>
-    <h1>Create a private, dated proof of your screenplay's existence - <em>without sending it out.</em></h1>
+    <h1>Create a private, dated proof of your screenplay's existence <em>— without sending it out.</em></h1>
     <p class="abstract">
       <strong>The Screenplay Registry is a free, open-source script registry for writers.</strong> It creates a cryptographic record of your exact draft while keeping the script on your computer. The Screenplay Registry hashes your draft on your own machine and anchors only the 32-byte fingerprint to Bitcoin, through <a href="https://opentimestamps.org" rel="noopener">OpenTimestamps</a>. The script never goes with it.
     </p>
     <p class="abstract">
-      You keep your script along with the two small files it produces: the manifest and the timestamp proof. Anyone with these files can verify your screenplay existed by a certain date.
+      Registering gives you two small files: a private <span class="mono">.screenreg</span> that keeps your script and its proof together, and a shareable version that proves the date without revealing a line. Anyone with the shareable file can verify your screenplay existed by a certain date — no server, no account.
     </p>
 
     <div class="cta-buttons">
@@ -646,7 +737,6 @@
     <div class="cta-secondary-links">
       <a href="#how">How it works</a>
       <a href="#tiers">The layers</a>
-      <a href="#scope">What it does &amp; doesn't prove</a>
       <a href="#faq">FAQ</a>
       <a href="https://github.com/screenplay-registry/screenreg">Source &amp; spec</a>
     </div>
@@ -655,90 +745,53 @@
   <!-- HOW IT WORKS — 2D SVG diagram -->
   <section class="s" id="how">
     <div class="num">§ 1 · How it works</div>
-    <h2>Three deterministic steps. <em>One portable proof.</em></h2>
-    <p>Your script is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Every step runs in your own browser and is reproducible from open-source code and published test vectors. You get back a small manifest file (the envelope) and a self-contained <span class="mono">.proof.ots</span> file — both small enough to email. Only the 32-byte digest ever leaves your machine; the script itself does not. The browser takes Fountain or plain text today; PDF screenplays convert to text with the <span class="mono">screenreg extract</span> CLI command, and in-browser PDF support is coming soon.</p>
+    <h2>Three deterministic steps. <em>Two portable files.</em></h2>
+    <p>Your script is canonicalized into normalized bytes; those bytes are hashed with SHA-256 into a 32-byte digest; the digest is committed to a Bitcoin block via OpenTimestamps. Every step runs in your own browser and is reproducible from open-source code and published test vectors. You get back two small <span class="mono">.screenreg</span> files — a shareable proof you can hand to anyone, and a private file you keep — both small enough to email. Only the 32-byte digest ever leaves your machine; the script itself does not. Bring a <a href="https://fountain.io/" rel="noopener">Fountain</a> file, plain text, or a PDF — register it right here in your browser (PDF text extraction runs locally in the page), or run the same steps yourself with the <span class="mono">screenreg</span> CLI.</p>
 
-    <div class="diagram-2d">
-      <svg viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="page-grad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#f4f0e6"/>
-            <stop offset="1" stop-color="#c9c3b3"/>
-          </linearGradient>
-          <linearGradient id="line-grad" x1="0" x2="1">
-            <stop offset="0" stop-color="rgba(200,154,58,0)"/>
-            <stop offset="0.4" stop-color="rgba(200,154,58,0.9)"/>
-            <stop offset="1" stop-color="rgba(200,154,58,0)"/>
-          </linearGradient>
-          <marker id="ar-fr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M0,0 L10,5 L0,10 z" fill="#c89a3a"/>
-          </marker>
-        </defs>
-
-        <!-- 1. script page -->
-        <g transform="translate(50,40)">
-          <rect width="200" height="200" fill="url(#page-grad)" rx="3"/>
-          <g font-family="ui-monospace,monospace" font-size="9" fill="#1a1612">
-            <text x="20" y="38">FADE IN:</text>
-            <text x="20" y="60">INT. ROOM — NIGHT</text>
-            <text x="20" y="82">A WRITER types.</text>
-            <line x1="20" y1="100" x2="180" y2="100" stroke="#999" stroke-width="0.8"/>
-            <line x1="20" y1="114" x2="160" y2="114" stroke="#999" stroke-width="0.8"/>
-            <line x1="20" y1="128" x2="170" y2="128" stroke="#999" stroke-width="0.8"/>
-            <line x1="20" y1="142" x2="140" y2="142" stroke="#999" stroke-width="0.8"/>
-            <line x1="20" y1="156" x2="180" y2="156" stroke="#999" stroke-width="0.8"/>
-            <line x1="20" y1="170" x2="120" y2="170" stroke="#999" stroke-width="0.8"/>
-          </g>
-          <text x="100" y="-12" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#847e6f" letter-spacing="2">DRAFT.FOUNTAIN</text>
-        </g>
-
-        <!-- arrow 1 -->
-        <line x1="260" y1="140" x2="380" y2="140" stroke="url(#line-grad)" stroke-width="1.4" marker-end="url(#ar-fr)"/>
-        <text x="320" y="125" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#c89a3a" letter-spacing="2">NORMALIZE</text>
-
-        <!-- 2. hash digest -->
-        <g transform="translate(400,60)">
-          <circle cx="80" cy="80" r="80" fill="none" stroke="#c89a3a" stroke-width="1.4" stroke-dasharray="3 4"/>
-          <circle cx="80" cy="80" r="56" fill="rgba(200,154,58,0.08)" stroke="#c89a3a" stroke-width="1"/>
-          <text x="80" y="68" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#c89a3a" letter-spacing="2">SHA-256</text>
-          <text x="80" y="86" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#1a1612">9f2c4e…d771ba</text>
-          <text x="80" y="102" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#847e6f">32 bytes</text>
-          <text x="80" y="-12" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#847e6f" letter-spacing="2">DIGEST</text>
-        </g>
-
-        <!-- arrow 2 -->
-        <line x1="572" y1="140" x2="692" y2="140" stroke="url(#line-grad)" stroke-width="1.4" marker-end="url(#ar-fr)"/>
-        <text x="632" y="125" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#c89a3a" letter-spacing="2">OPENTIMESTAMPS</text>
-
-        <!-- 3. bitcoin block -->
-        <g transform="translate(720,40)">
-          <rect width="200" height="200" fill="none" stroke="#c89a3a" stroke-width="1.4"/>
-          <g stroke="#c89a3a" stroke-width="0.8">
-            <rect x="20" y="20" width="44" height="34" fill="none"/>
-            <rect x="78" y="20" width="44" height="34" fill="rgba(200,154,58,0.35)"/>
-            <rect x="136" y="20" width="44" height="34" fill="none"/>
-            <rect x="20" y="68" width="44" height="34" fill="none"/>
-            <rect x="78" y="68" width="44" height="34" fill="none"/>
-            <rect x="136" y="68" width="44" height="34" fill="none"/>
-            <rect x="20" y="116" width="44" height="34" fill="none"/>
-            <rect x="78" y="116" width="44" height="34" fill="none"/>
-            <rect x="136" y="116" width="44" height="34" fill="none"/>
-          </g>
-          <text x="100" y="180" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#c89a3a" letter-spacing="2">BLOCK 875,432</text>
-          <text x="100" y="-12" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#847e6f" letter-spacing="2">BITCOIN</text>
-        </g>
-
-        <!-- arrow 3 -->
-        <line x1="932" y1="140" x2="1052" y2="140" stroke="url(#line-grad)" stroke-width="1.4" marker-end="url(#ar-fr)"/>
-
-        <!-- proof file -->
-        <g transform="translate(1080,90)">
-          <rect width="80" height="100" fill="rgba(200,154,58,0.12)" stroke="#c89a3a" stroke-width="1.4"/>
-          <text x="40" y="46" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#1a1612">.ots</text>
-          <text x="40" y="64" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#847e6f">PROOF</text>
-          <text x="40" y="-12" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#847e6f" letter-spacing="2">ARTIFACT</text>
-        </g>
-      </svg>
+    <div class="hw-stage">
+      <div class="flow">
+        <div class="node script">
+          <div class="g-script"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="cap">Script</div>
+        </div>
+        <div class="seg s2">
+          <span class="arr">→</span>
+          <div class="node">
+            <div class="g-hash">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#e3c069" stroke-width="2.2"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+              <span class="hx">9f2c4e…</span>
+            </div>
+            <div class="cap">Hash</div>
+          </div>
+        </div>
+        <div class="seg s3">
+          <span class="arr">→</span>
+          <div class="node">
+            <div class="g-block">
+              <span style="left:8px;top:8px;"></span><span class="f" style="left:33px;top:8px;"></span><span style="left:58px;top:8px;"></span>
+              <span style="left:8px;top:33px;"></span><span style="left:33px;top:33px;"></span><span style="left:58px;top:33px;"></span>
+              <span style="left:8px;top:58px;"></span><span style="left:33px;top:58px;"></span><span style="left:58px;top:58px;"></span>
+            </div>
+            <div class="cap">Bitcoin block</div>
+          </div>
+        </div>
+        <div class="seg s4">
+          <span class="arr">→</span>
+          <div class="node">
+            <div class="g-files">
+              <div class="f share">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#c89a3a" stroke-width="2"><circle cx="6" cy="12" r="2.4"></circle><circle cx="18" cy="6" r="2.4"></circle><circle cx="18" cy="18" r="2.4"></circle><path d="M8 11l8-4M8 13l8 4"></path></svg>
+                <span class="lab">shareable</span><span class="sub">.screenreg</span>
+              </div>
+              <div class="f priv">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#b3261a" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                <span class="lab">private</span><span class="sub">.screenreg</span>
+              </div>
+            </div>
+            <div class="cap">Two files</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="step-labels">
@@ -747,13 +800,13 @@
       <div class="lbl"><div class="n">Step 3 · Anchor</div><p>The digest is submitted to OpenTimestamps calendars, which aggregate it with thousands of others into a Merkle root that is committed to Bitcoin. No fee, no wallet, no Bitcoin in sight.</p></div>
     </div>
 
-    <p style="margin-top: 24px;">Identical inputs always produce an identical digest. A counterparty, a defendant's counsel, an academic auditor, or a future maintainer with no connection to the initial contributors can reproduce verification offline — using the manifest, the <span class="mono">.proof.ots</span> file, and a Bitcoin node. No server, no account, and no permission from us is ever required.</p>
+    <p style="margin-top: 24px;">Identical inputs always produce an identical digest. A counterparty, a defendant's counsel, an academic auditor, or a future maintainer with no connection to the initial contributors can reproduce verification offline — using the shareable <span class="mono">.screenreg</span> file and a Bitcoin node. No server, no account, and no permission from us is ever required.</p>
   </section>
 
   <!-- THREE TIERS -->
   <section class="s" id="tiers">
     <div class="num">§ 2 · The layers</div>
-    <h2>The base layer <em>works today.</em></h2>
+    <h2>A proof in layers.</h2>
     <p>The protocol is designed in layers. The base layer is a free Bitcoin timestamp. Two more layers are specified but not live yet: a public index and an optional on-chain record. Both would be opt-in, and neither would change or replace the Bitcoin proof you already hold.</p>
 
     <div class="bill-grid tier-grid">
@@ -807,7 +860,7 @@
         <div class="big-num">$45</div>
       </div>
       <div class="bill-cell ours">
-        <div class="tag">The Screenplay Registry · base layer</div>
+        <div class="tag"><img src="/icon.svg" alt="" class="tag-mark">TSR - Base Layer</div>
         <h4>Cryptographic timestamp</h4>
         <p class="small">A 32-byte fingerprint submitted to OpenTimestamps in about a minute, with Bitcoin confirmation a few hours later. The script stays on your machine. Use this <em>with</em> the Copyright Office, not instead of it.</p>
         <div class="big-num">$0</div>
@@ -815,24 +868,10 @@
     </div>
   </section>
 
-  <!-- NOT DOES -->
-  <section class="s" id="scope">
-    <div class="num">§ 4 · Out of scope</div>
-    <h2>Explicit non-goals.</h2>
-    <p>The Registry's value depends on honest scope. We are pedantic about what the protocol does and does not do so that lawyers, journalists, and writers can rely on the artifact without misrepresenting it.</p>
-
-    <div class="notdoes">
-      <div class="cell"><span class="k">Does not prove authorship</span><span class="v">A timestamp proves bytes existed at time <em>t</em>. It does not prove who wrote them. Authorship is established by the surrounding chain of custody: drafts, emails, version control, witnesses, deposition.</span></div>
-      <div class="cell"><span class="k">Does not replace the Copyright Office</span><span class="v">USCO registration is the procedural prerequisite to sue for infringement and the source of statutory damages. Register with USCO. The Registry is a complement, not a substitute.</span></div>
-      <div class="cell"><span class="k">Never stores your script</span><span class="v">Your screenplay stays on your machine. Only a 32-byte fingerprint is ever transmitted, so there is nothing here for anyone to leak, subpoena, or train an AI on.</span></div>
-      <div class="cell"><span class="k">Does not need a wallet</span><span class="v">The base layer needs no wallet, no cryptocurrency, and no account. Bitcoin is just the implementation detail of the anchoring layer; there is no token, fee, or wallet popup. The optional on-chain record is opt-in, never required, and would be gasless to you.</span></div>
-    </div>
-  </section>
-
   <!-- FAQ -->
   <section class="s" id="faq">
-    <div class="num">§ 5 · Questions</div>
-    <h2>The questions writers <em>actually ask.</em></h2>
+    <div class="num">§ 4 · Questions</div>
+    <h2>FAQ</h2>
     <p>Short, honest answers. For the long version, see the <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/faq.md">full FAQ</a> and the <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/threat-model.md">threat model</a>.</p>
 
     <div class="faq">
@@ -848,7 +887,7 @@
 
       <details>
         <summary>What does it <em>not</em> prove?</summary>
-        <div class="a"><p>It does not prove who wrote the script — a timestamp shows that bytes existed at a time, not who authored them. And it is not a substitute for registering with the U.S. Copyright Office, which is what lets you sue for infringement. Use this <em>alongside</em> the Copyright Office, not instead of it.</p></div>
+        <div class="a"><p>It does not prove who wrote the script — a timestamp shows that bytes existed at a time, not who authored them. Authorship is established by the surrounding chain of custody: drafts, emails, version control, witnesses, and depositions. And it is not a substitute for registering with the U.S. Copyright Office, which is the procedural prerequisite to sue for infringement and the source of statutory damages. Use this <em>alongside</em> the Copyright Office, not instead of it.</p></div>
       </details>
 
       <details>
@@ -878,32 +917,57 @@
 
       <details>
         <summary>What can I register, and from where?</summary>
-        <div class="a"><p>Today, drop a Fountain or plain-text screenplay into the browser. PDF screenplays convert to text with the <span class="mono">screenreg extract</span> command-line tool for now, and in-browser PDF support is coming soon. The command-line tool offers the same proof with more options for people who want them.</p></div>
+        <div class="a"><p>Drop a <a href="https://fountain.io/" rel="noopener">Fountain</a> file, plain text, or a PDF straight into the browser — PDF text extraction runs locally in the page, so nothing is uploaded. Prefer the terminal? The <span class="mono">screenreg</span> CLI does the same registration with more options. Either way, the work happens on your own machine.</p></div>
       </details>
     </div>
   </section>
 
   <!-- DEVELOPERS / INTEGRATORS / SPEC EXCERPT -->
   <section class="s" id="integrate">
-    <div class="num">§ 6 · For developers &amp; integrators</div>
-    <h2>Any screenwriting app can add this, <em>without asking us.</em></h2>
-    <p>Writers never touch a command line; the base layer above is a browser page. This part is for people building screenwriting tools. The reference implementation is TypeScript, MIT-licensed, dependency-light, and has no exotic cryptography. Desktop apps, web apps, and indie Fountain editors can add a "register this draft" action by spawning the CLI, or by running the same logic in the browser through the shared modules behind <span class="mono">/create/</span>.</p>
+    <div class="num">§ 5 · For developers &amp; integrators</div>
+    <h2>A new adoptable standard.</h2>
+    <p>Writers can create or verify a proof right on The Screenplay Registry website — no command line required.</p>
+    <p>Power users can do the same from the <span class="mono">screenreg</span> CLI, with advanced options for generating and verifying proofs on their own. And developers can go further still, integrating the open ScreenReg standard directly into their own apps.</p>
+    <p>The protocol is fully specified, the reference implementation is MIT-licensed TypeScript, and every <span class="mono">.screenreg</span> proof verifies on its own against Bitcoin. However it's created — website, CLI, or another app — the proof is identical: portable, trustless, independently verifiable.</p>
+    <p><strong>No account. No API key. No permission required.</strong></p>
 
-<pre class="block"><span class="c"># minimal embed — register the current draft from any tool</span>
-<span class="c"># (works wherever you can spawn a subprocess: Electron, Tauri, native bridge, etc.)</span>
+<div class="console">
+      <input type="radio" name="contab" id="tab-dev" class="tabin">
+      <input type="radio" name="contab" id="tab-cli" class="tabin" checked="">
+      <div class="tabs">
+        <label for="tab-cli"><span class="dot"></span>Manual advanced proofing</label>
+        <label for="tab-dev"><span class="dot"></span>Developer integration</label>
+      </div>
+      <div class="panes">
+<pre class="pane pane-dev"><span class="cmt">// Embed "register this draft" in your editor — runs in the user's browser.</span>
+<span class="cmt">// Vendor the MIT reference modules (src/shared); no package, no CDN, no us.</span>
+<span class="k">import</span> { register, verify } <span class="k">from</span> <span class="v">"./screenreg/index.js"</span>;
 
-<span class="k">$</span> screenreg register draft.fountain \
-    --identity \
-    --envelope-out drafts/v3.manifest.json \
-    --ots-out drafts/v3.proof.ots
+<span class="cmt">// hash + anchor locally; the draft text never leaves the tab</span>
+<span class="k">const</span> proof = <span class="k">await</span> register(draftText, { format: <span class="v">"fountain"</span> });
 
-<span class="c"># produces:</span>
-<span class="c">#   drafts/v3.manifest.json  — the envelope (commitment + metadata)</span>
-<span class="c">#   drafts/v3.proof.ots      — the OpenTimestamps Bitcoin proof</span>
-<span class="c">#   drafts/v3.private-key.pem — Ed25519 signing key (chmod 600)</span>
+proof.screenreg     <span class="cmt">// Uint8Array — full proof (script + timestamp)</span>
+proof.evidence      <span class="cmt">// Uint8Array — shareable proof, omits the script</span>
+proof.claimHash     <span class="cmt">// "sha256:9f2c4e7a…d771ba"</span>
 
-<span class="k">$</span> screenreg verify draft.fountain drafts/v3.manifest.json drafts/v3.proof.ots
-<span class="c"># ✓ VERIFIED — claim hash matches and a Bitcoin attestation is present</span></pre>
+<span class="cmt">// verify against Bitcoin — offline, no server in the trust path</span>
+<span class="k">const</span> r = <span class="k">await</span> verify(proof.screenreg);
+<span class="cmt">// → { ok: true, anchoredAt: "2026-…Z", blockHeight: 875432 }</span></pre>
+<pre class="pane pane-cli"><span class="cmt"># Generate and anchor the whole proof yourself — your machine, your keys.</span>
+<span class="k">$</span> screenreg register draft.fountain <span class="v">--identity</span>
+<span class="cmt">#   draft.screenreg          full proof, signed with your Ed25519 key</span>
+
+<span class="cmt"># power-user options</span>
+<span class="k">$</span> screenreg register draft.fountain <span class="v">--loose</span>   <span class="cmt"># separate manifest.json + .ots</span>
+<span class="k">$</span> screenreg extract draft.pdf <span class="v">&gt;</span> draft.fountain  <span class="cmt"># PDF → reviewable Fountain</span>
+<span class="k">$</span> screenreg scene-prove draft.fountain draft.manifest.json 47
+<span class="k">$</span> screenreg upgrade draft.proof.ots         <span class="cmt"># fold in Bitcoin confirmation</span>
+
+<span class="cmt"># verify anywhere, offline, against Bitcoin alone</span>
+<span class="k">$</span> screenreg verify draft.screenreg
+<span class="s"># ✓ VERIFIED — claim hash matches and a Bitcoin attestation is present</span></pre>
+      </div>
+    </div>
 
     <div class="cta-row">
       <a href="https://github.com/screenplay-registry/screenreg/blob/main/docs/adoption-guide.md">→ Read the adoption guide</a>
@@ -914,26 +978,18 @@
 
   <!-- GOVERNANCE -->
   <section class="s" id="governance">
-    <div class="num">§ 7 · Governance</div>
-    <h2>Steward today. Council tomorrow.</h2>
-    <p>The protocol is presently maintained by its initial contributors. The roadmap calls for transition to an independent technical council with representation from working screenwriters, integrators, legal practitioners, and protocol engineers (triggered by three external integrators OR six months, whichever comes first). The spec, test vectors, and reference implementation are licensed such that any party may fork and continue the work without our permission and without our cooperation. <strong>That is the point.</strong></p>
-
-    <dl class="metabox" style="border-top: 1px solid var(--rule); padding-top: 20px;">
-      <dt>Identifier</dt>     <dd>urn:screenplay-registration-claim:v1</dd>
-      <dt>Status</dt>         <dd>v0.2 · base layer live</dd>
-      <dt>Steward</dt>        <dd>Initial contributors</dd>
-      <dt>Future steward</dt> <dd>Independent council</dd>
-      <dt>License (code)</dt> <dd>MIT</dd>
-      <dt>License (spec)</dt> <dd>CC-BY 4.0</dd>
-      <dt>License (vectors)</dt><dd>CC0</dd>
-      <dt>Cousins</dt>        <dd>OpenTimestamps, C2PA, Sigstore</dd>
-    </dl>
+    <div class="num">§ 6 · Governance</div>
+    <h2>The record <em>belongs to the writer.</em></h2>
+    <p>Screenwriters have always had to prove a draft is theirs by handing it over to someone for safekeeping. A custodian holds the record, sets the terms, charges the fee, and decides what counts. Proving your own work has meant getting permission to do it.</p>
+    <p>The Screenplay Registry doesn't work that way. There's no custodian in the middle. A writer can establish that a draft existed at a given moment and prove it to anyone, indefinitely, without needing a single party to vouch for them. The proof is anchored to Bitcoin rather than to us. Nobody can revoke it or take it away.</p>
+    <p>We're not trying to own this. We wrote the first version, but the goal is <em>a trustless registry that belongs to no one in particular</em>, ourselves included, and a standard like that was never going to stay with its authors for long. For now the initial contributors maintain it. The plan is to hand it to an independent technical council of working screenwriters, integrators, legal practitioners, and protocol engineers.</p>
+    <p>The license is what makes that real. Anyone can fork the spec, the test vectors, and the reference implementation and carry the work forward, no permission or cooperation from us required. We did that on purpose.</p>
   </section>
 
   <!-- SPEC / FOOTER LINKS -->
   <section class="s" id="spec">
-    <div class="num">§ 8 · Specification</div>
-    <h2>The full spec, section by section.</h2>
+    <div class="num">§ 7 · Specification</div>
+    <h2>The full spec, by section.</h2>
     <ul style="font-family: ui-monospace, Menlo, monospace; font-size: 14px; line-height: 2; padding-left: 0; list-style: none;">
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/01-normalization.md">Section 01 · Normalization</a></li>
       <li>→ <a href="https://github.com/screenplay-registry/screenreg/blob/main/spec/v1/02-envelope.md">Section 02 · Envelope &amp; Claim record (RFC 8785 canonicalization)</a></li>
@@ -949,6 +1005,9 @@
   </section>
 
   <footer>
+    <div class="foot-logo">
+      <img src="/icon.svg" alt="The Screenplay Registry">
+    </div>
     <div class="foot-grid">
       <div>
         <h5>The Screenplay Registry</h5>
@@ -983,5 +1042,18 @@
 
 </main>
 
-</body>
-</html>
+<script>
+  (function(){
+    var hw = document.querySelector('.hw-stage');
+    if(!hw) return;
+    if(!('IntersectionObserver' in window)){ hw.classList.add('run'); return; }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ hw.classList.add('run'); io.disconnect(); } });
+    }, { threshold: 0.35 });
+    io.observe(hw);
+  })();
+</script>
+
+
+
+</body></html>

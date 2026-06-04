@@ -13,8 +13,11 @@
 /verify/*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests
 
+# The script-src sha256 hash authorizes the single inline hero-animation script in
+# index.html (scroll-triggered reveal). No 'unsafe-inline'/'self' — only that exact
+# script runs. Regenerate the hash if that script's bytes change.
 /
-  Content-Security-Policy: default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-zWKFGQCfKiZMuBPJWSv09jABEl4b6mbR6UruhmcP0Sw='; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 
 /*.html
-  Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-zWKFGQCfKiZMuBPJWSv09jABEl4b6mbR6UruhmcP0Sw='; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
