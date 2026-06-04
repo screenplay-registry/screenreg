@@ -10,7 +10,7 @@
  *   claim <file>               — debug: build committedClaim + print claimHash
  *   scene-prove <file> <env> <sceneIndex>  — generate selective-disclosure proof
  *   scene-verify <root> <sceneContent-base64> <proof-json>
- *   decrypt-field <env> <fieldName>  — prompts for password, decrypts and prints field
+ *   decrypt-field <env> <fieldName>  — reads password (--password / env / file / prompt), decrypts and prints field
  */
 
 import { readFileSync, writeFileSync, existsSync, readSync, openSync, writeSync, closeSync, fchmodSync, lstatSync, unlinkSync, mkdirSync } from 'node:fs'
@@ -1674,12 +1674,18 @@ function cmdGenerateIdentity(outPath: string): void {
   process.stdout.write(`Public key (paste into committedClaim.registrant.publicKey): ${kp.publicKeyEncoded}\n`)
 }
 
-async function cmdDecryptField(envelopePath: string, fieldName: string): Promise<void> {
+async function cmdDecryptField(
+  envelopePath: string,
+  fieldName: string,
+  passwordArg?: string,
+): Promise<void> {
   const envelope = readEnvelope(envelopePath)
   if (!envelope.committedClaim.encryptedFields) {
     die('envelope has no encryptedFields block')
   }
-  const password = await readPassword(`Password for ${fieldName}: `)
+  // --password mirrors `register` (with the same argv-exposure warning); falling
+  // back to readPassword (SCREENREG_PASSWORD_FILE > env > prompt) otherwise.
+  const password = passwordArg ?? (await readPassword(`Password for ${fieldName}: `))
   const result = decryptFieldsBlock({
     password,
     claimVersion: envelope.committedClaim.claimVersion,
@@ -2307,7 +2313,10 @@ function printUsage(): void {
   ${CLI_NAME} claim <file>
   ${CLI_NAME} scene-prove <file> <envelope> <sceneIndex>
   ${CLI_NAME} scene-verify <root> <sceneContent-base64> <proof.json>
-  ${CLI_NAME} decrypt-field <envelope> <fieldName>
+  ${CLI_NAME} decrypt-field <envelope> <fieldName> [--password PASSWORD]
+                       Password source: --password (exposes it via argv — a warning
+                       is printed), else SCREENREG_PASSWORD_FILE / SCREENREG_PASSWORD,
+                       else an interactive prompt.
   ${CLI_NAME} extract <input.pdf> [--out PATH] [--preserve-page-numbers]
                        [--preserve-scene-numbers]
                        Extracts a PDF to Fountain text via the reference
@@ -3017,10 +3026,25 @@ async function main(): Promise<void> {
       if (rest.length < 3) die('scene-verify: need <root> <sceneContent-base64> <proof.json>')
       cmdSceneVerify(rest[0]!, rest[1]!, rest[2]!)
       return
-    case 'decrypt-field':
-      if (rest.length < 2) die('decrypt-field: need <envelope> <fieldName>')
-      await cmdDecryptField(rest[0]!, rest[1]!)
+    case 'decrypt-field': {
+      let password: string | undefined
+      const positional: string[] = []
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === '--password') {
+          const val = rest[++i]
+          if (val === undefined) die('--password requires a value')
+          password = val
+          process.stderr.write(
+            `⚠  --password on the CLI exposes the password via process argv (visible to\n` +
+              `   other users via \`ps\`). Use SCREENREG_PASSWORD_FILE=<path> or omit\n` +
+              `   --password to be prompted.\n`,
+          )
+        } else positional.push(rest[i]!)
+      }
+      if (positional.length < 2) die('decrypt-field: need <envelope> <fieldName>')
+      await cmdDecryptField(positional[0]!, positional[1]!, password)
       return
+    }
     case 'extract': {
       const positional: string[] = []
       let outPath: string | undefined
