@@ -86,6 +86,30 @@ describe('CLI: register default = single .screenreg (S-C)', () => {
     expect(fin.stderr).toMatch(/cannot read|not a \.screenreg|finalize/)
   })
 
+  it('finalize --watch polls until --max-checks, then gives up (exit 3)', () => {
+    runCli(['register', script, '--mock'])
+    const fin = runCli([
+      'finalize',
+      join(tmp, 'draft.screenreg'),
+      '--watch',
+      '--interval',
+      '1',
+      '--max-checks',
+      '2',
+      '--timeout-ms',
+      '1000',
+    ])
+    expect(fin.code).toBe(3)
+    expect(fin.stderr).toMatch(/Still pending after 2 checks/)
+  })
+
+  it('finalize rejects --interval / --max-checks without --watch', () => {
+    runCli(['register', script, '--mock'])
+    const fin = runCli(['finalize', join(tmp, 'draft.screenreg'), '--interval', '5'])
+    expect(fin.code).not.toBe(0)
+    expect(fin.stderr).toMatch(/only apply with --watch/)
+  })
+
   it('--evidence writes BOTH the full bundle and a proof-only twin', () => {
     const reg = runCli(['register', script, '--mock', '--evidence'])
     expect(reg.code).toBe(0)

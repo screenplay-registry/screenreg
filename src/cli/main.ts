@@ -59,6 +59,7 @@ import {
 } from '../shared/screenreg/index.js'
 import type { Envelope as SharedEnvelope } from '../shared/envelope/types.js'
 import { BANNER } from './banner.js'
+import { startSpinner, formatDuration, countdownSleep } from './progress.js'
 import {
   buildEncryptedFieldsBlock,
   decryptFieldsBlock,
@@ -503,8 +504,11 @@ async function cmdRegister(opts: RegisterOptions): Promise<void> {
   const claimHashBytes = computeClaimHashBytes(claim)
   const claimHash = `sha256:${claimHashBytes.toString('hex')}`
 
-  process.stderr.write(`Stamping claim hash via OpenTimestamps...\n`)
+  // quietLabel preserves the pre-spinner behavior: this line was always printed,
+  // including under a pipe, so keep it byte-identical for non-interactive callers.
+  const stopStamp = startSpinner('Stamping claim hash via OpenTimestamps...', { quietLabel: true })
   const stampResult = await submitOts({ digest: claimHashBytes, mock: !!opts.mock })
+  stopStamp()
   if (!stampResult.ok) {
     die(`OTS submission failed: ${stampResult.reason}${stampResult.stderr ? '\n' + stampResult.stderr : ''}`)
   }
@@ -1081,6 +1085,12 @@ interface FinalizeCliOptions {
   outPath?: string
   /** Per-calendar request timeout in milliseconds. */
   timeoutMs?: number
+  /** Keep polling until the proof confirms on Bitcoin, with a live countdown. */
+  watch?: boolean
+  /** Seconds between polls in watch mode (default 600 ≈ one Bitcoin block). */
+  intervalSeconds?: number
+  /** In watch mode, give up (exit 3) after this many pending checks. 0 = unlimited. */
+  maxChecks?: number
 }
 
 /**
@@ -1090,7 +1100,9 @@ interface FinalizeCliOptions {
  * so the CLI and the browser finalize identically.
  *
  * Exit codes: 0 = confirmed (proof upgraded and written), 3 = still pending
- * (no Bitcoin attestation yet; safe to re-run later), 1 = error.
+ * (no Bitcoin attestation yet; safe to re-run later), 1 = error. With `--watch`
+ * the command does not exit on pending — it re-polls with a live countdown until
+ * the proof confirms (0), an error occurs (1), or `--max-checks` is reached (3).
  */
 async function cmdFinalize(opts: FinalizeCliOptions): Promise<void> {
   // Accept either a bare .ots proof or a .screenreg bundle (unpack → finalize → repack in place).
@@ -1147,47 +1159,73 @@ async function cmdFinalize(opts: FinalizeCliOptions): Promise<void> {
   const finalizeOpts: FinalizeOptions = { otsBytes }
   if (opts.timeoutMs !== undefined) finalizeOpts.timeoutMs = opts.timeoutMs
 
-  const result = await finalizeProof(finalizeOpts)
+  const intervalSeconds = opts.intervalSeconds ?? 600
+  const startMs = Date.now()
+  let checks = 0
+  for (;;) {
+    checks++
+    const stopPoll = startSpinner('Checking the OpenTimestamps calendars for a Bitcoin block…')
+    const result = await finalizeProof(finalizeOpts)
+    stopPoll()
 
-  if (result.status === 'error') {
-    die(`finalize: ${result.reason ?? 'could not parse the .ots proof'}`)
-  }
-  if (result.status === 'pending') {
-    process.stderr.write(
-      `⧗  Still pending — the Bitcoin confirmation is not available yet.\n` +
-        `   This is normal in the first ~1-6 hours after registration. The proof is\n` +
-        `   already valid as a pending calendar attestation; re-run \`${CLI_NAME} finalize\`\n` +
-        `   later to fold in the Bitcoin block.\n`,
-    )
-    if (result.pendingCalendars.length > 0) {
-      process.stderr.write(`   Pending calendars: ${result.pendingCalendars.join(', ')}\n`)
+    if (result.status === 'error') {
+      die(`finalize: ${result.reason ?? 'could not parse the .ots proof'}`)
     }
-    process.exit(3)
-  }
 
-  const outPath = opts.outPath ?? opts.otsPath
-  if (isBundle && parsedBundle) {
-    // Fold the upgraded proof back into the one file (full bundle if it carries the source text,
-    // evidence bundle otherwise). claimHash is unchanged — only the unhashed proof bytes upgrade.
-    let rebuilt: Uint8Array
-    try {
-      rebuilt = parsedBundle.sourceText
-        ? await buildScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes, sourceText: parsedBundle.sourceText })
-        : await buildEvidenceScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes })
-    } catch (err) {
-      die(`finalize: could not repack the .screenreg: ${err instanceof ScreenregError ? err.message : String(err)}`)
+    if (result.status === 'confirmed') {
+      const outPath = opts.outPath ?? opts.otsPath
+      if (isBundle && parsedBundle) {
+        // Fold the upgraded proof back into the one file (full bundle if it carries the source
+        // text, evidence bundle otherwise). claimHash is unchanged — only the unhashed proof bytes.
+        let rebuilt: Uint8Array
+        try {
+          rebuilt = parsedBundle.sourceText
+            ? await buildScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes, sourceText: parsedBundle.sourceText })
+            : await buildEvidenceScreenreg({ envelope: parsedBundle.envelope, otsBytes: result.otsBytes })
+        } catch (err) {
+          die(`finalize: could not repack the .screenreg: ${err instanceof ScreenregError ? err.message : String(err)}`)
+        }
+        writeFileSync(outPath, Buffer.from(rebuilt))
+      } else {
+        writeFileSync(outPath, Buffer.from(result.otsBytes))
+      }
+      const plural = result.bitcoinBlockHeights.length > 1 ? 's' : ''
+      const waited = opts.watch ? ` after ${formatDuration((Date.now() - startMs) / 1000)}` : ''
+      process.stderr.write(
+        `✓  Confirmed on Bitcoin${waited} (block height${plural}: ${result.bitcoinBlockHeights.join(', ')}).\n` +
+          `   Wrote the finalized ${isBundle ? '.screenreg' : 'proof'} to ${outPath}. It now verifies against\n` +
+          `   Bitcoin block headers alone — no calendar or server required.\n`,
+      )
+      process.exit(0)
     }
-    writeFileSync(outPath, Buffer.from(rebuilt))
-  } else {
-    writeFileSync(outPath, Buffer.from(result.otsBytes))
+
+    // status === 'pending'
+    if (!opts.watch) {
+      // The --watch hint is an interactive affordance only; keep non-TTY (piped/CI)
+      // output byte-identical to the pre-watch behavior.
+      const watchHint = process.stderr.isTTY ? ' (or pass --watch to wait here)' : ''
+      process.stderr.write(
+        `⧗  Still pending — the Bitcoin confirmation is not available yet.\n` +
+          `   This is normal in the first ~1-6 hours after registration. The proof is\n` +
+          `   already valid as a pending calendar attestation; re-run \`${CLI_NAME} finalize\`\n` +
+          `   later to fold in the Bitcoin block${watchHint}.\n`,
+      )
+      if (result.pendingCalendars.length > 0) {
+        process.stderr.write(`   Pending calendars: ${result.pendingCalendars.join(', ')}\n`)
+      }
+      process.exit(3)
+    }
+
+    if (opts.maxChecks && checks >= opts.maxChecks) {
+      process.stderr.write(
+        `⧗  Still pending after ${checks} check${checks > 1 ? 's' : ''} (${formatDuration((Date.now() - startMs) / 1000)}). Giving up for now;\n` +
+          `   the proof is unchanged on disk — re-run \`${CLI_NAME} finalize --watch\` later.\n`,
+      )
+      process.exit(3)
+    }
+
+    await countdownSleep(intervalSeconds, (Date.now() - startMs) / 1000)
   }
-  const plural = result.bitcoinBlockHeights.length > 1 ? 's' : ''
-  process.stderr.write(
-    `✓  Confirmed on Bitcoin (block height${plural}: ${result.bitcoinBlockHeights.join(', ')}).\n` +
-      `   Wrote the finalized ${isBundle ? '.screenreg' : 'proof'} to ${outPath}. It now verifies against\n` +
-      `   Bitcoin block headers alone — no calendar or server required.\n`,
-  )
-  process.exit(0)
 }
 
 function cmdNormalize(inputFile: string): void {
@@ -2184,11 +2222,15 @@ function printUsage(): void {
   ${CLI_NAME} timelock-decrypt <envelope> <fieldName>
   ${CLI_NAME} generate-identity <output-private-key.pem>
   ${CLI_NAME} finalize <ots|.screenreg> [--out PATH] [--timeout-ms N]   (alias: upgrade)
+                       [--watch [--interval SECONDS] [--max-checks N]]
                        Folds the Bitcoin attestation into a pending proof once the
                        calendars have it (typically 1-6 h after registration). Accepts a
                        bare .ots OR a .screenreg (unpacks, upgrades, repacks in place).
                        Writes in place (or to --out), via the clean-room TS engine — no
                        Python. Exit: 0 confirmed, 3 still pending, 1 error.
+                       --watch: keep polling with a live countdown until the proof
+                       confirms (--interval between checks, default 600s; --max-checks
+                       gives up with exit 3 after N pending checks).
   ${CLI_NAME} normalize <file>
   ${CLI_NAME} claim <file>
   ${CLI_NAME} scene-prove <file> <envelope> <sceneIndex>
@@ -2807,6 +2849,9 @@ async function main(): Promise<void> {
       const positional: string[] = []
       let outPath: string | undefined
       let timeoutMs: number | undefined
+      let watch = false
+      let intervalSeconds: number | undefined
+      let maxChecks: number | undefined
       for (let i = 0; i < rest.length; i++) {
         const a = rest[i]!
         if (a === '--out' || a === '-o') {
@@ -2818,6 +2863,20 @@ async function main(): Promise<void> {
           const n = Number(v)
           if (!Number.isInteger(n) || n <= 0) die(`--timeout-ms: expected a positive integer, got ${JSON.stringify(v)}`)
           timeoutMs = n
+        } else if (a === '--watch' || a === '-w') {
+          watch = true
+        } else if (a === '--interval') {
+          const v = rest[++i]
+          if (v === undefined) die('--interval requires an argument (seconds)')
+          const n = Number(v)
+          if (!Number.isInteger(n) || n < 1) die(`--interval: expected a positive integer of seconds, got ${JSON.stringify(v)}`)
+          intervalSeconds = n
+        } else if (a === '--max-checks') {
+          const v = rest[++i]
+          if (v === undefined) die('--max-checks requires an argument')
+          const n = Number(v)
+          if (!Number.isInteger(n) || n < 1) die(`--max-checks: expected a positive integer, got ${JSON.stringify(v)}`)
+          maxChecks = n
         } else if (!a.startsWith('-')) {
           positional.push(a)
         } else {
@@ -2826,9 +2885,15 @@ async function main(): Promise<void> {
       }
       if (positional.length < 1) die(`${cmd}: need <ots>`)
       if (positional.length > 1) die(`${cmd}: too many arguments — pass one <ots> path (use --out for a different output path)`)
+      if ((intervalSeconds !== undefined || maxChecks !== undefined) && !watch) {
+        die(`${cmd}: --interval / --max-checks only apply with --watch`)
+      }
       const fo: FinalizeCliOptions = { otsPath: positional[0]! }
       if (outPath !== undefined) fo.outPath = outPath
       if (timeoutMs !== undefined) fo.timeoutMs = timeoutMs
+      if (watch) fo.watch = true
+      if (intervalSeconds !== undefined) fo.intervalSeconds = intervalSeconds
+      if (maxChecks !== undefined) fo.maxChecks = maxChecks
       await cmdFinalize(fo)
       return
     }
